@@ -2,7 +2,7 @@ from typing import Optional
 
 import pytest
 
-from src.testing.analysis import AccuracyStats, Statistics, TimingStats, evaluate
+from src.testing.analysis import AccuracyStats, Statistics, TimingStats, Verdict, evaluate
 from src.testing.sampling import Sample
 from src.utils.config import AmmeterSpec
 
@@ -55,26 +55,40 @@ def test_accuracy_against_reference() -> None:
         AccuracyStats.from_values([1.0], reference_a=0.0)
 
 
+def verdict_for(
+    samples: list[Sample], max_failure_rate: float = 0.0, max_schedule_error_ms: Optional[float] = None
+) -> Verdict:
+    values = [s.value_a for s in samples if s.value_a is not None]
+    stats = Statistics.from_values(values) if values else None
+    timing = TimingStats.from_samples(samples)
+    return evaluate(samples, stats, timing, SPEC, max_failure_rate, max_schedule_error_ms)
+
+
 def test_verdict_passes_within_limits() -> None:
-    samples = [sample(0), sample(1), sample(2, value=None, error="x")]
-    verdict = evaluate(samples, Statistics.from_values([1.0, 1.0]), SPEC, max_failure_rate=0.34)
+    verdict = verdict_for([sample(0), sample(1), sample(2, value=None, error="x")], max_failure_rate=0.34)
     assert verdict.passed and verdict.reasons == []
 
 
 def test_verdict_fails_on_too_many_failures() -> None:
-    samples = [sample(0), sample(1, value=None, error="x")]
-    verdict = evaluate(samples, Statistics.from_values([1.0]), SPEC, max_failure_rate=0.0)
+    verdict = verdict_for([sample(0), sample(1, value=None, error="x")])
     assert not verdict.passed
     assert verdict.reasons == ["1 of 2 samples failed (50%, limit 0%)"]
 
 
 def test_verdict_fails_out_of_range_readings() -> None:
-    verdict = evaluate([sample(0, 12.0), sample(1, -1.0)], Statistics.from_values([12.0, -1.0]), SPEC, 0.0)
+    verdict = verdict_for([sample(0, 12.0), sample(1, -1.0)])
     assert not verdict.passed
     assert len(verdict.reasons) == 2
     assert "below" in verdict.reasons[0] and "above" in verdict.reasons[1]
 
 
+def test_verdict_fails_late_samples() -> None:
+    samples = [sample(0), sample(1, late_ms=12.0)]
+    assert verdict_for(samples).passed  # no limit configured
+    verdict = verdict_for(samples, max_schedule_error_ms=10)
+    assert verdict.reasons == ["max schedule error 12.00 ms exceeds the 10 ms limit"]
+
+
 def test_verdict_when_every_sample_failed() -> None:
-    verdict = evaluate([sample(0, None, "x")], None, SPEC, max_failure_rate=0.05)
+    verdict = verdict_for([sample(0, None, "x")], max_failure_rate=0.05)
     assert not verdict.passed

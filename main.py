@@ -40,8 +40,8 @@ def main() -> None:
     try:
         for spec in start_emulators(Config.load(args.config)):
             current = read_current(spec.host, spec.port, spec.command, spec.timeout_s)
-            print(f"{spec.name} (port {spec.port}): {current} A")
-        print("Emulators are running. Press Ctrl+C to stop.")
+            print(f"{spec.name} (port {spec.port}): {current} A", flush=True)
+        print("Emulators are running. Press Ctrl+C to stop.", flush=True)
         while True:
             time.sleep(1)
     except (ConfigError, AmmeterError) as exc:

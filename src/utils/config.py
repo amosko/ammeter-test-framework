@@ -28,6 +28,7 @@ class AmmeterSpec:
     timeout_s: float = 2.0
     expected_min_a: Optional[float] = None
     expected_max_a: Optional[float] = None
+    reference_current_a: Optional[float] = None  # known current for this ammeter, overrides the global one
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.name):
@@ -39,6 +40,8 @@ class AmmeterSpec:
         low, high = self.expected_min_a, self.expected_max_a
         if low is not None and high is not None and low > high:
             raise ConfigError(f"ammeter '{self.name}': expected range is reversed")
+        if self.reference_current_a == 0:
+            raise ConfigError(f"ammeter '{self.name}': reference current must not be zero")
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,7 @@ class Config:
     duration_s: Optional[float]
     frequency_hz: Optional[float]
     max_failure_rate: float
+    max_schedule_error_ms: Optional[float]  # None disables the timing criterion
     simulated_failure_rate: float
     simulation_seed: Optional[int]
     reference_current_a: Optional[float]
@@ -62,6 +66,8 @@ class Config:
                 raise ConfigError(f"'{name}' must be between 0 and 1, got {rate}")
         if self.reference_current_a == 0:
             raise ConfigError("'reference_current_a' must not be zero")
+        if self.max_schedule_error_ms is not None and self.max_schedule_error_ms <= 0:
+            raise ConfigError("'max_schedule_error_ms' must be positive")
 
     def ammeter(self, name: str) -> AmmeterSpec:
         try:
@@ -93,6 +99,7 @@ class Config:
             duration_s=_optional(sampling, "total_duration_seconds", float),
             frequency_hz=_optional(sampling, "sampling_frequency_hz", float),
             max_failure_rate=_value(testing, "max_failure_rate", float, 0.0),
+            max_schedule_error_ms=_optional(testing, "max_schedule_error_ms", float),
             simulated_failure_rate=_value(simulation, "failure_rate", float, 0.0),
             simulation_seed=_optional(simulation, "seed", int),
             reference_current_a=_optional(analysis, "reference_current_a", float),
@@ -167,4 +174,5 @@ def _parse_ammeter(name: str, entry: Any, timeout_s: float) -> AmmeterSpec:
         timeout_s=timeout_s,
         expected_min_a=expected_min,
         expected_max_a=expected_max,
+        reference_current_a=_optional(entry, "reference_current_a", float),
     )

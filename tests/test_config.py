@@ -25,12 +25,14 @@ def test_shipped_config_matches_the_emulators() -> None:
     assert ports == [("greenlee", 5000), ("entes", 5001), ("circutor", 5002)]
     assert config.ammeter("circutor").command == "MEASURE_CIRCUTOR -get_measurement -current"
     assert config.sample_count == 50 and config.frequency_hz == 10 and config.duration_s is None
+    assert config.max_failure_rate == 0.05 and config.max_schedule_error_ms == 10
 
 
 def test_minimal_config_uses_defaults() -> None:
     config = Config.from_dict(MINIMAL)
     spec = config.ammeter("greenlee")
-    assert (spec.host, spec.timeout_s, spec.expected_min_a) == ("localhost", 2.0, None)
+    assert (spec.host, spec.timeout_s, spec.expected_min_a, spec.reference_current_a) == ("localhost", 2.0, None, None)
+    assert config.max_schedule_error_ms is None
     assert (config.max_failure_rate, config.simulated_failure_rate, config.plots_enabled) == (0.0, 0.0, True)
     assert config.results_dir == Path("results")
 
@@ -59,6 +61,11 @@ def test_unknown_ammeter_lists_the_known_ones() -> None:
         (with_sections(analysis=True), "'analysis' section is missing or not a mapping"),
         (with_sections(analysis={"visualization": {"enabled": "false"}}), "'enabled' must be bool"),
         (with_sections(analysis={"reference_current_a": 0}), "must not be zero"),
+        (with_ammeter(reference_current_a=0), "reference current must not be zero"),
+        (
+            with_sections(testing={"sampling": {}, "max_schedule_error_ms": 0}),
+            "'max_schedule_error_ms' must be positive",
+        ),
     ],
 )
 def test_broken_configs_give_clear_errors(broken: dict[str, Any], message: str) -> None:

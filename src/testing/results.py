@@ -37,11 +37,13 @@ class RunResult:
         samples: Sequence[Sample],
         started: datetime,
         metadata: dict[str, Any],
-        max_failure_rate: float,
+        max_failure_rate: float = 0.0,
         reference_a: Optional[float] = None,
+        max_schedule_error_ms: Optional[float] = None,
     ) -> "RunResult":
         values = [s.value_a for s in samples if s.value_a is not None]
         stats = Statistics.from_values(values) if values else None
+        timing = TimingStats.from_samples(samples)
         return cls(
             run_id=f"{started:%Y%m%d_%H%M%S}_{spec.name}_{uuid.uuid4().hex[:8]}",
             created_at=started.isoformat(timespec="seconds"),
@@ -50,9 +52,9 @@ class RunResult:
             metadata=metadata,
             samples=list(samples),
             statistics=stats,
-            timing=TimingStats.from_samples(samples),
+            timing=timing,
             accuracy=AccuracyStats.from_values(values, reference_a) if values and reference_a is not None else None,
-            verdict=evaluate(samples, stats, spec, max_failure_rate),
+            verdict=evaluate(samples, stats, timing, spec, max_failure_rate, max_schedule_error_ms),
         )
 
     @property

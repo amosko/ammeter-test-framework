@@ -1,4 +1,3 @@
-import socket
 from collections.abc import Callable
 from pathlib import Path
 
@@ -88,20 +87,25 @@ def test_unreachable_ammeter_hint(tmp_path: Path, capsys: pytest.CaptureFixture[
     config = tmp_path / "dead.yaml"
     config.write_text(CONFIG_TEMPLATE.format(greenlee=free_port(), entes=free_port()), encoding="utf-8")
     assert main(["--config", str(config), "--results-dir", str(tmp_path), "run", "greenlee", "--no-plot"]) == 1
-    assert "python main.py" in capsys.readouterr().err
+    assert "Start the emulators (main.py) or pass --start-emulators" in capsys.readouterr().err
+
+
+def test_start_emulators_refuses_ports_that_are_already_served(
+    config_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["--config", str(config_file), "--results-dir", str(tmp_path), "run", "greenlee", "--start-emulators"]
+    assert main(args) == 1  # the session emulators already serve these ports
+    err = capsys.readouterr().err
+    assert "already served; drop --start-emulators" in err and "pass --start-emulators" not in err
 
 
 def test_start_emulators_reports_why_main_py_died(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    taken = socket.socket()
-    taken.bind(("localhost", 0))
-    taken.listen()
-    with taken:
-        config = tmp_path / "taken.yaml"
-        config.write_text(CONFIG_TEMPLATE.format(greenlee=taken.getsockname()[1], entes=free_port()), encoding="utf-8")
-        exit_code = main(["--config", str(config), "--results-dir", str(tmp_path), "run", "--start-emulators"])
-    assert exit_code == 1
+    config = tmp_path / "fluke.yaml"
+    fluke = "ammeters:\n  fluke:\n    port: {port}\n    command: X\ntesting:\n  sampling:\n    measurements_count: 2\n"
+    config.write_text(fluke.format(port=free_port()), encoding="utf-8")
+    assert main(["--config", str(config), "--results-dir", str(tmp_path), "run", "--start-emulators"]) == 1
     err = capsys.readouterr().err
-    assert "main.py exited" in err and "already in use" in err and "pass --start-emulators" not in err
+    assert "main.py exited with code 1" in err and "none of the configured ammeters has an emulator" in err
 
 
 def test_start_emulators_runs_main_py(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

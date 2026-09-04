@@ -45,9 +45,21 @@ class AmmeterTestFramework:
             "python": platform.python_version(),
             "platform": platform.platform(),
             "simulated_failure_rate": self.config.simulated_failure_rate,
+            "max_failure_rate": self.config.max_failure_rate,
+            "max_schedule_error_ms": self.config.max_schedule_error_ms,
         }
+        reference = (
+            spec.reference_current_a if spec.reference_current_a is not None else self.config.reference_current_a
+        )
         result = RunResult.from_samples(
-            spec, plan, samples, started, metadata, self.config.max_failure_rate, self.config.reference_current_a
+            spec,
+            plan,
+            samples,
+            started,
+            metadata,
+            self.config.max_failure_rate,
+            reference,
+            self.config.max_schedule_error_ms,
         )
         path = self.archive.save(result)
         logger.info("%s: %s, saved %s", spec.name, "PASS" if result.verdict.passed else "FAIL", path)

@@ -24,12 +24,14 @@ testing:
     sampling_frequency_hz: 10
   timeout_seconds: 2.0                 # per connect and per reply
   max_failure_rate: 0.05               # a run fails if more than this fraction of samples fail
+  max_schedule_error_ms: 10            # or if a sample is taken this late; null disables the check
   error_simulation:
     failure_rate: 0.0                  # 0.0-1.0, randomly fails samples to exercise error handling
     seed: null
 
 analysis:
-  reference_current_a: null            # known reference current, enables accuracy metrics
+  reference_current_a: null            # known reference current, enables accuracy metrics; an ammeter entry
+                                       # may set its own reference_current_a
   visualization:
     enabled: true
 

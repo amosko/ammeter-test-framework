@@ -89,9 +89,14 @@ class Verdict:
 
 
 def evaluate(
-    samples: Sequence[Sample], stats: Optional[Statistics], spec: AmmeterSpec, max_failure_rate: float
+    samples: Sequence[Sample],
+    stats: Optional[Statistics],
+    timing: TimingStats,
+    spec: AmmeterSpec,
+    max_failure_rate: float,
+    max_schedule_error_ms: Optional[float] = None,
 ) -> Verdict:
-    """Fail when too many samples failed or a reading is outside the ammeter's expected range."""
+    """Fail on too many failed samples, readings outside the expected range, or samples taken too late."""
     reasons = []
     failed = sum(not s.ok for s in samples)
     failure_rate = failed / len(samples)
@@ -102,4 +107,8 @@ def evaluate(
             reasons.append(f"minimum {stats.minimum:.4g} A is below the expected {spec.expected_min_a:g} A")
         if spec.expected_max_a is not None and stats.maximum > spec.expected_max_a:
             reasons.append(f"maximum {stats.maximum:.4g} A is above the expected {spec.expected_max_a:g} A")
+    if max_schedule_error_ms is not None and timing.max_schedule_error_ms > max_schedule_error_ms:
+        reasons.append(
+            f"max schedule error {timing.max_schedule_error_ms:.2f} ms exceeds the {max_schedule_error_ms:g} ms limit"
+        )
     return Verdict(passed=not reasons, reasons=reasons)

@@ -49,6 +49,20 @@ def test_simulated_failures_are_reported(config: Config) -> None:
     assert result.metadata["simulated_failure_rate"] == 1.0
 
 
+def test_ammeter_reference_overrides_the_global_one(config: Config) -> None:
+    calibrated = dataclasses.replace(config.ammeter("greenlee"), reference_current_a=1.0)
+    config = dataclasses.replace(config, ammeters={**config.ammeters, "greenlee": calibrated}, reference_current_a=2.0)
+    framework = AmmeterTestFramework(config)
+
+    assert framework.run_test("greenlee").accuracy.reference_a == 1.0  # type: ignore[union-attr]
+    assert framework.run_test("entes").accuracy.reference_a == 2.0  # type: ignore[union-attr]
+
+
+def test_run_metadata_records_the_criteria(config: Config) -> None:
+    metadata = AmmeterTestFramework(config).run_test("greenlee").metadata
+    assert metadata["max_failure_rate"] == 0.05 and metadata["max_schedule_error_ms"] == 10
+
+
 def test_make_measure_hook_swaps_the_transport(config: Config) -> None:
     class ConstantFramework(AmmeterTestFramework):
         def make_measure(self, spec: AmmeterSpec) -> Measure:

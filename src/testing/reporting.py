@@ -14,7 +14,7 @@ def format_run(result: RunResult) -> str:
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",
         f"  samples   {len(result.values)}/{len(result.samples)} ok, {pace}, "
-        f"{timing.actual_span_s:.2f} s (scheduled {timing.planned_span_s:.2f} s)",
+        f"{timing.actual_span_s:.3g} s (scheduled {timing.planned_span_s:.3g} s)",
         f"  timing    max schedule error {timing.max_schedule_error_ms:.2f} ms, "
         f"latency mean {timing.mean_latency_ms:.2f} ms / max {timing.max_latency_ms:.2f} ms",
     ]
@@ -80,7 +80,7 @@ def format_comparison(results: Sequence[RunResult]) -> str:
             f"{r.timing.mean_latency_ms:.2f}",
         ]
         if with_accuracy and r.accuracy is not None:
-            row += [f"{r.accuracy.bias_a:+.4g}", f"{r.accuracy.mean_abs_error_percent:.1f}"]
+            row += [f"{r.accuracy.bias_a:+.4g}", _num(r.accuracy.mean_abs_error_percent)]
         rows.append(row)
 
     lines = [_table(header, rows)]

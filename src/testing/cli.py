@@ -40,7 +40,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         hint = (
             ""
             if getattr(args, "start_emulators", False)
-            else " Start them with 'python main.py' or pass --start-emulators."
+            else " Start the emulators (main.py) or pass --start-emulators."
         )
         print(f"error: {exc}.{hint}", file=sys.stderr)
         return 1
@@ -170,6 +170,9 @@ def _print_plot(path: Optional[Path]) -> None:
 @contextlib.contextmanager
 def _emulators(config: Config, config_path: Path, names: Sequence[str]) -> Iterator[None]:
     """Run main.py in the background until the block ends; its stdout is discarded, its stderr reported."""
+    for spec in (config.ammeter(name) for name in names):
+        if is_listening(spec.host, spec.port):
+            raise AmmeterError(f"{spec.host}:{spec.port} is already served; drop --start-emulators to use it")
     command = [sys.executable, str(ROOT / "main.py"), "--config", str(config_path.resolve())]
     process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     try:

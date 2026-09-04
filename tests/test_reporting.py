@@ -23,7 +23,7 @@ def test_run_report_lists_everything() -> None:
     assert report.startswith("Run 20260102_030405_entes_")
     assert "[FAIL]" in report
     assert "label: ref" in report
-    assert "samples   3/3 ok, 10 Hz, 0.20 s (scheduled 0.20 s)" in report
+    assert "samples   3/3 ok, 10 Hz, 0.201 s (scheduled 0.2 s)" in report
     assert "current   mean 10.67 A, median 11 A, stdev 1.528 A, min 9 A, max 12 A, CV 14.32%" in report
     assert "accuracy  vs 10 A: bias +0.6667 A, mean abs error 1.333 A (13.3%), max abs error 2 A" in report
     assert "!! maximum 12 A is above the expected 10 A" in report
