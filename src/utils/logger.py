@@ -1,4 +1,5 @@
 """Logging setup shared by the command line tools."""
+
 import logging
 from datetime import datetime
 from pathlib import Path

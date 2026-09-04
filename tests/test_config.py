@@ -1,0 +1,79 @@
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from src.utils.config import DEFAULT_CONFIG_PATH, Config, ConfigError
+
+MINIMAL: dict[str, Any] = {
+    "ammeters": {"greenlee": {"port": 5000, "command": "CMD"}},
+    "testing": {"sampling": {"measurements_count": 10}},
+}
+
+
+def with_sections(**sections: Any) -> dict[str, Any]:
+    return {**MINIMAL, **sections}
+
+
+def with_ammeter(**fields: Any) -> dict[str, Any]:
+    return with_sections(ammeters={"a": {"port": 1, "command": "x", **fields}})
+
+
+def test_shipped_config_matches_the_emulators() -> None:
+    config = Config.load(DEFAULT_CONFIG_PATH)
+    ports = [(spec.name, spec.port) for spec in config.ammeters.values()]
+    assert ports == [("greenlee", 5000), ("entes", 5001), ("circutor", 5002)]
+    assert config.ammeter("circutor").command == "MEASURE_CIRCUTOR -get_measurement -current"
+    assert config.sample_count == 50 and config.frequency_hz == 10 and config.duration_s is None
+
+
+def test_minimal_config_uses_defaults() -> None:
+    config = Config.from_dict(MINIMAL)
+    spec = config.ammeter("greenlee")
+    assert (spec.host, spec.timeout_s, spec.expected_min_a) == ("localhost", 2.0, None)
+    assert (config.max_failure_rate, config.simulated_failure_rate, config.plots_enabled) == (0.0, 0.0, True)
+    assert config.results_dir == Path("results")
+
+
+def test_unknown_ammeter_lists_the_known_ones() -> None:
+    with pytest.raises(ConfigError, match="unknown ammeter 'fluke'; configured: greenlee"):
+        Config.from_dict(MINIMAL).ammeter("fluke")
+
+
+@pytest.mark.parametrize(
+    "broken, message",
+    [
+        ({"testing": {"sampling": {}}}, "'ammeters' section is missing"),
+        (with_sections(ammeters={}), "'ammeters' section is empty"),
+        (with_sections(ammeters={"a": {"command": "x"}}), "needs both 'port' and 'command'"),
+        (with_sections(ammeters={"a": "5000"}), "must be a mapping"),
+        (with_ammeter(port="abc"), "'port' must be a int"),
+        (with_ammeter(port=True), "'port' must be a int"),
+        (with_ammeter(port=70000), "port 70000 is out of range"),
+        (with_ammeter(expected_range_a=[1]), "must be a \\[min, max\\] pair"),
+        (with_ammeter(expected_range_a=[5, 1]), "expected range is reversed"),
+        ({"ammeters": MINIMAL["ammeters"]}, "'testing' section is missing"),
+        (with_sections(testing={"sampling": {}, "timeout_seconds": 0}), "timeout must be positive"),
+        (with_sections(testing={"sampling": {}, "max_failure_rate": 2}), "must be between 0 and 1"),
+        (with_sections(analysis=True), "'analysis' section is missing or not a mapping"),
+        (with_sections(analysis={"visualization": {"enabled": "false"}}), "'enabled' must be a bool"),
+        (with_sections(analysis={"reference_current_a": 0}), "must not be zero"),
+    ],
+)
+def test_broken_configs_give_clear_errors(broken: dict[str, Any], message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        Config.from_dict(broken)
+
+
+def test_missing_and_invalid_files(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="cannot read config file"):
+        Config.load(tmp_path / "nope.yaml")
+    with pytest.raises(ConfigError, match="cannot read config file"):
+        Config.load(tmp_path)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("ammeters: [unclosed", encoding="utf-8")
+    with pytest.raises(ConfigError, match="invalid YAML"):
+        Config.load(bad)
+    bad.write_text("- just a list", encoding="utf-8")
+    with pytest.raises(ConfigError, match="mapping at the top level"):
+        Config.load(bad)

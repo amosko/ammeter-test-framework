@@ -22,7 +22,7 @@ testing:
     measurements_count: 50
     total_duration_seconds: null       # give any two of the three; the third is derived
     sampling_frequency_hz: 10
-  connection_timeout_seconds: 2.0
+  timeout_seconds: 2.0                 # per connect and per reply
   max_failure_rate: 0.05               # a run fails if more than this fraction of samples fail
   error_simulation:
     failure_rate: 0.0                  # 0.0-1.0, randomly fails samples to exercise error handling

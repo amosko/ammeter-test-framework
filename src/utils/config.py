@@ -1,17 +1,19 @@
 """Typed, validated access to config/config.yaml."""
+
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 import yaml
 
-DEFAULT_CONFIG_PATH = Path("config/config.yaml")
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
 
 T = TypeVar("T")
 
 
 class ConfigError(Exception):
-    """The configuration file is missing, malformed or incomplete."""
+    """The configuration is missing, malformed or inconsistent."""
 
 
 @dataclass(frozen=True)
@@ -26,9 +28,20 @@ class AmmeterSpec:
     expected_min_a: Optional[float] = None
     expected_max_a: Optional[float] = None
 
+    def __post_init__(self) -> None:
+        if not 1 <= self.port <= 65535:
+            raise ConfigError(f"ammeter '{self.name}': port {self.port} is out of range")
+        if self.timeout_s <= 0:
+            raise ConfigError(f"ammeter '{self.name}': timeout must be positive")
+        low, high = self.expected_min_a, self.expected_max_a
+        if low is not None and high is not None and low > high:
+            raise ConfigError(f"ammeter '{self.name}': expected range is reversed")
+
 
 @dataclass(frozen=True)
 class Config:
+    """Where the ammeters are and how to sample, judge and store runs. Validated on construction."""
+
     ammeters: dict[str, AmmeterSpec]
     sample_count: Optional[int]
     duration_s: Optional[float]
@@ -36,9 +49,16 @@ class Config:
     max_failure_rate: float
     simulated_failure_rate: float
     simulation_seed: Optional[int]
-    reference_a: Optional[float]
+    reference_current_a: Optional[float]
     plots_enabled: bool
     results_dir: Path
+
+    def __post_init__(self) -> None:
+        for name, rate in (("max_failure_rate", self.max_failure_rate), ("failure_rate", self.simulated_failure_rate)):
+            if not 0 <= rate <= 1:
+                raise ConfigError(f"'{name}' must be between 0 and 1, got {rate}")
+        if self.reference_current_a == 0:
+            raise ConfigError("'reference_current_a' must not be zero")
 
     def ammeter(self, name: str) -> AmmeterSpec:
         try:
@@ -54,15 +74,15 @@ class Config:
     def from_dict(cls, data: dict[str, Any]) -> "Config":
         testing = _section(data, "testing")
         sampling = _section(testing, "sampling")
-        simulation = testing.get("error_simulation") or {}
-        analysis = data.get("analysis") or {}
-        visualization = analysis.get("visualization") or {}
-        results = data.get("result_management") or {}
+        simulation = _section(testing, "error_simulation", required=False)
+        analysis = _section(data, "analysis", required=False)
+        visualization = _section(analysis, "visualization", required=False)
+        results = _section(data, "result_management", required=False)
 
-        timeout_s = _value(testing, "connection_timeout_seconds", float, 2.0)
         ammeters = _section(data, "ammeters")
         if not ammeters:
             raise ConfigError("'ammeters' section is empty")
+        timeout_s = _value(testing, "timeout_seconds", float, 2.0)
 
         return cls(
             ammeters={name: _parse_ammeter(name, entry, timeout_s) for name, entry in ammeters.items()},
@@ -72,7 +92,7 @@ class Config:
             max_failure_rate=_value(testing, "max_failure_rate", float, 0.0),
             simulated_failure_rate=_value(simulation, "failure_rate", float, 0.0),
             simulation_seed=_optional(simulation, "seed", int),
-            reference_a=_optional(analysis, "reference_current_a", float),
+            reference_current_a=_optional(analysis, "reference_current_a", float),
             plots_enabled=_value(visualization, "enabled", bool, True),
             results_dir=Path(_value(results, "directory", str, "results")),
         )
@@ -83,8 +103,8 @@ def load_config(path: Path) -> dict[str, Any]:
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-    except FileNotFoundError:
-        raise ConfigError(f"config file not found: {path}") from None
+    except OSError as exc:
+        raise ConfigError(f"cannot read config file: {exc}") from None
     except yaml.YAMLError as exc:
         raise ConfigError(f"invalid YAML in {path}: {exc}") from None
     if not isinstance(data, dict):
@@ -92,8 +112,10 @@ def load_config(path: Path) -> dict[str, Any]:
     return data
 
 
-def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
+def _section(data: dict[str, Any], key: str, required: bool = True) -> dict[str, Any]:
     section = data.get(key)
+    if section is None and not required:
+        return {}
     if not isinstance(section, dict):
         raise ConfigError(f"'{key}' section is missing or not a mapping")
     return section
@@ -110,6 +132,8 @@ def _value(section: dict[str, Any], key: str, convert: Callable[[Any], T], defau
 
 
 def _convert(key: str, raw: Any, convert: Callable[[Any], T]) -> T:
+    if isinstance(raw, bool) != (convert is bool):  # YAML true/false is not a number, and "false" is not a bool
+        raise ConfigError(f"'{key}' must be a {convert.__name__}, got {raw!r}")
     try:
         return convert(raw)
     except (TypeError, ValueError):
@@ -134,7 +158,7 @@ def _parse_ammeter(name: str, entry: Any, timeout_s: float) -> AmmeterSpec:
 
     return AmmeterSpec(
         name=name,
-        host=str(entry.get("host", "localhost")),
+        host=_value(entry, "host", str, "localhost"),
         port=port,
         command=command,
         timeout_s=timeout_s,

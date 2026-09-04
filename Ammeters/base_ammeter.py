@@ -1,3 +1,4 @@
+import os
 import random
 import socket
 import time
@@ -16,7 +17,8 @@ class AmmeterEmulatorBase(ABC):
         The server will run indefinitely, handling one client request at a time.
         """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # allow immediate restart (TIME_WAIT)
+            if os.name == "posix":  # restart while old connections are in TIME_WAIT; unsafe on Windows
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(('localhost', self.port))
             s.listen()
             print(f"{self.__class__.__name__} is running on port {self.port}")
