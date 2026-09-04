@@ -1,4 +1,5 @@
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +55,29 @@ def test_archive_lists_runs_oldest_first(tmp_path: Path) -> None:
     archive.save(older)
     assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]
     assert archive.latest_per_ammeter() == [newer]
+
+
+def test_archive_sorts_by_time_not_by_string(tmp_path: Path) -> None:
+    archive = ResultsArchive(tmp_path)
+    winter = make_result([1.0], datetime(2026, 3, 27, 2, 30).astimezone(timezone(timedelta(hours=2))))
+    summer = make_result([1.0], datetime(2026, 3, 27, 3, 15).astimezone(timezone(timedelta(hours=3))))
+    archive.save(summer)
+    archive.save(winter)
+    assert [r.run_id for r in archive.load_all()] == [winter.run_id, summer.run_id]
+
+
+def test_corrupt_files_are_reported_and_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    archive = ResultsArchive(tmp_path)
+    good = make_result([1.0])
+    archive.save(good)
+    (tmp_path / "notes.json").write_text('{"not": "a run"}', encoding="utf-8")
+    (tmp_path / "broken.json").write_text("{truncated", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="notes.json is not a valid run file"):
+        archive.load("notes")
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "broken.json" in caplog.text and "notes.json" in caplog.text
 
 
 def test_missing_run_is_reported(tmp_path: Path) -> None:

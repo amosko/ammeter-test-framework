@@ -8,7 +8,7 @@ from typing import Optional
 from src.testing.ammeter import Ammeter, FaultInjector, Measure
 from src.testing.results import ResultsArchive, RunResult
 from src.testing.sampling import SamplingPlan, collect_samples
-from src.utils.config import Config
+from src.utils.config import AmmeterSpec, Config
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +21,17 @@ class AmmeterTestFramework:
     def sampling_plan(self) -> SamplingPlan:
         return SamplingPlan.resolve(self.config.sample_count, self.config.duration_s, self.config.frequency_hz)
 
+    def make_measure(self, spec: AmmeterSpec) -> Measure:
+        """Override to use another transport; the callable must raise AmmeterError for a failed reading."""
+        return Ammeter(spec).measure
+
     def run_test(self, ammeter_type: str, label: Optional[str] = None) -> RunResult:
         """Run one sampling test. Raises ConfigError for unknown ammeters and AmmeterError if unreachable."""
         spec = self.config.ammeter(ammeter_type)
         plan = self.sampling_plan()
-        ammeter = Ammeter(spec)
-        ammeter.measure()  # connectivity check: fail fast instead of producing a run full of failures
+        measure = self.make_measure(spec)
+        measure()  # connectivity check: fail fast instead of producing a run full of failures
 
-        measure: Measure = ammeter.measure
         if self.config.simulated_failure_rate:
             measure = FaultInjector(measure, self.config.simulated_failure_rate, self.config.simulation_seed)
 

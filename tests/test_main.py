@@ -5,7 +5,7 @@ import pytest
 from Ammeters.client import AmmeterError, read_current
 from main import start_emulators
 from src.utils.config import Config
-from tests.conftest import free_port
+from tests.helpers import free_port
 
 
 def test_start_emulators_serves_every_configured_ammeter(config: Config) -> None:

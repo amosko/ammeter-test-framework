@@ -6,20 +6,22 @@ import dataclasses
 import logging
 import subprocess
 import sys
+import time
 from collections.abc import Iterator, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from Ammeters.client import AmmeterConnectionError, AmmeterError, wait_for_ammeter
+from Ammeters.client import AmmeterConnectionError, AmmeterError, is_listening
 from src.testing.framework import AmmeterTestFramework
 from src.testing.reporting import format_comparison, format_listing, format_run
 from src.testing.results import RunResult
 from src.testing.visualization import plot_comparison, plot_run
-from src.utils.config import DEFAULT_CONFIG_PATH, Config, ConfigError
+from src.utils.config import DEFAULT_CONFIG_PATH, AmmeterSpec, Config, ConfigError
 from src.utils.logger import configure_logging
 
 ROOT = Path(__file__).resolve().parents[2]
+EMULATOR_START_TIMEOUT_S = 10
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -28,13 +30,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         config = Config.load(args.config)
         if args.results_dir is not None:
             config = dataclasses.replace(config, results_dir=args.results_dir)
-        configure_logging(config.results_dir / "logs", logging.DEBUG if args.verbose else logging.INFO)
+        log_dir = config.results_dir / "logs" if args.command == "run" else None
+        configure_logging(log_dir, logging.DEBUG if args.verbose else logging.INFO)
         return int(args.handler(args, config))
     except (ConfigError, ValueError, FileNotFoundError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     except AmmeterConnectionError as exc:
-        print(f"error: {exc}\nStart the emulators with 'python main.py' or pass --start-emulators.", file=sys.stderr)
+        hint = (
+            ""
+            if getattr(args, "start_emulators", False)
+            else " Start them with 'python main.py' or pass --start-emulators."
+        )
+        print(f"error: {exc}.{hint}", file=sys.stderr)
         return 1
     except AmmeterError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -92,13 +100,16 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
     }
     config = dataclasses.replace(config, **{k: v for k, v in overrides.items() if v is not None})
     framework = AmmeterTestFramework(config)
-    framework.sampling_plan()  # validate the sampling settings before touching any device
+    try:
+        framework.sampling_plan()  # validate the sampling settings before touching any device
+    except ValueError as exc:
+        raise ValueError(f"{exc}{_sampling_hint(args)}") from None
     names = args.ammeters or list(config.ammeters)
     for name in names:
         config.ammeter(name)
 
     results: list[RunResult] = []
-    with _emulators(config, args.config) if args.start_emulators else contextlib.nullcontext():
+    with _emulators(config, args.config, names) if args.start_emulators else contextlib.nullcontext():
         for name in names:
             result = framework.run_test(name, args.label)
             results.append(result)
@@ -134,6 +145,15 @@ def cmd_compare(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _sampling_hint(args: argparse.Namespace) -> str:
+    flags = [
+        f"--{n}" for n, v in (("count", args.count), ("duration", args.duration), ("frequency", args.frequency)) if v
+    ]
+    if len(flags) == 1:
+        return f" ({flags[0]} was combined with the config's other sampling values; pass a second flag to replace one)"
+    return ""
+
+
 def _print_comparison(results: Sequence[RunResult], framework: AmmeterTestFramework, plot: bool) -> None:
     print(f"Comparison of {len(results)} runs")
     print(format_comparison(results))
@@ -148,14 +168,25 @@ def _print_plot(path: Optional[Path]) -> None:
 
 
 @contextlib.contextmanager
-def _emulators(config: Config, config_path: Path) -> Iterator[None]:
-    """Run main.py quietly in the background until the block ends."""
+def _emulators(config: Config, config_path: Path, names: Sequence[str]) -> Iterator[None]:
+    """Run main.py in the background until the block ends; its stdout is discarded, its stderr reported."""
     command = [sys.executable, str(ROOT / "main.py"), "--config", str(config_path.resolve())]
-    process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     try:
-        for spec in config.ammeters.values():
-            wait_for_ammeter(spec.host, spec.port, timeout_s=10)
+        for name in names:
+            _wait_for_emulator(process, config.ammeter(name))
         yield
     finally:
         process.terminate()
         process.wait(timeout=5)
+
+
+def _wait_for_emulator(process: "subprocess.Popen[str]", spec: AmmeterSpec) -> None:
+    deadline = time.monotonic() + EMULATOR_START_TIMEOUT_S
+    while not is_listening(spec.host, spec.port):
+        if process.poll() is not None:
+            stderr = process.stderr.read().strip() if process.stderr else ""
+            raise AmmeterConnectionError(f"main.py exited with code {process.returncode}: {stderr}")
+        if time.monotonic() > deadline:
+            raise AmmeterConnectionError(f"{spec.host}:{spec.port} not reachable after {EMULATOR_START_TIMEOUT_S}s")
+        time.sleep(0.05)

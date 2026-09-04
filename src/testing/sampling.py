@@ -1,6 +1,7 @@
 """Timed collection of measurements."""
 
 import logging
+import sys
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -10,7 +11,8 @@ from src.testing.ammeter import Measure
 
 logger = logging.getLogger(__name__)
 
-SPIN_WINDOW_S = 0.002  # busy-wait for the last 2 ms before each deadline: schedule error stays far below 1 ms
+# Busy-wait this close to each deadline; sleep granularity is ~15 ms on Windows before Python 3.11, ~1 ms elsewhere.
+SPIN_WINDOW_S = 0.02 if sys.platform == "win32" else 0.002
 
 
 @dataclass(frozen=True)

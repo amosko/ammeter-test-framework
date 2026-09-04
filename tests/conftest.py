@@ -1,28 +1,15 @@
 import dataclasses
-import socket
+import logging
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from Ammeters.base_ammeter import AmmeterEmulatorBase
-from Ammeters.Circutor_Ammeter import CircutorAmmeter
 from Ammeters.client import wait_for_ammeter
-from Ammeters.Entes_Ammeter import EntesAmmeter
-from Ammeters.Greenlee_Ammeter import GreenleeAmmeter
+from main import EMULATORS
 from src.utils.config import DEFAULT_CONFIG_PATH, AmmeterSpec, Config
-
-EMULATORS: dict[str, type[AmmeterEmulatorBase]] = {
-    "greenlee": GreenleeAmmeter,
-    "entes": EntesAmmeter,
-    "circutor": CircutorAmmeter,
-}
-
-
-def free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("localhost", 0))
-        return int(sock.getsockname()[1])
+from tests.helpers import free_port
 
 
 @pytest.fixture(scope="session")
@@ -50,3 +37,13 @@ def config(emulator_ports: dict[str, int], tmp_path: Path) -> Config:
 @pytest.fixture
 def greenlee(config: Config) -> AmmeterSpec:
     return config.ammeter("greenlee")
+
+
+@pytest.fixture(autouse=True)
+def reset_logging() -> Iterator[None]:
+    """CLI tests attach handlers to pytest's capture streams; drop them so later tests do not write to closed files."""
+    yield
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+        handler.close()

@@ -1,6 +1,7 @@
 """Test results and the on-disk archive (one JSON file per run)."""
 
 import json
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -10,7 +11,9 @@ from typing import Any, Optional
 
 from src.testing.analysis import AccuracyStats, Statistics, TimingStats, Verdict, evaluate
 from src.testing.sampling import Sample, SamplingPlan
-from src.utils.config import AmmeterSpec
+from src.utils.config import AmmeterSpec, ConfigError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -102,11 +105,20 @@ class ResultsArchive:
         path = self.path_for(run_id)
         if not path.is_file():
             raise FileNotFoundError(f"no run '{run_id}' in {self.directory}")
-        return RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        try:
+            return RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        except (ValueError, KeyError, TypeError, ConfigError) as exc:
+            raise ValueError(f"{path} is not a valid run file: {exc}") from None
 
     def load_all(self) -> list[RunResult]:
-        """All archived runs, oldest first."""
-        return sorted((self.load(p.stem) for p in self.directory.glob("*.json")), key=lambda r: r.created_at)
+        """All archived runs, oldest first; files that are not run files are skipped with a warning."""
+        results = []
+        for path in self.directory.glob("*.json"):
+            try:
+                results.append(self.load(path.stem))
+            except ValueError as exc:
+                logger.warning("skipping %s", exc)
+        return sorted(results, key=lambda r: datetime.fromisoformat(r.created_at))
 
     def latest_per_ammeter(self) -> list[RunResult]:
         latest = {result.ammeter.name: result for result in self.load_all()}

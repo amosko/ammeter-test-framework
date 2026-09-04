@@ -59,9 +59,11 @@ def format_listing(results: Sequence[RunResult]) -> str:
 
 def format_comparison(results: Sequence[RunResult]) -> str:
     """Runs side by side, ranked by precision (CV); accuracy columns appear when every run has a reference."""
+    if not results:
+        return "nothing to compare"
     with_accuracy = all(r.accuracy is not None for r in results)
     ranked = sorted(results, key=_cv_key)
-    header = ["ammeter", "run_id", "mean [A]", "median [A]", "stdev [A]", "CV %", "failed", "latency ms"]
+    header = ["ammeter", "run_id", "mean [A]", "median [A]", "stdev [A]", "CV %", "failed/total", "latency [ms]"]
     if with_accuracy:
         header += ["bias [A]", "abs error %"]
     rows = []
@@ -84,13 +86,13 @@ def format_comparison(results: Sequence[RunResult]) -> str:
     lines = [_table(header, rows)]
     best = ranked[0]
     if best.statistics is not None and best.statistics.cv_percent is not None:
-        lines.append(f"Most consistent (lowest CV): {best.ammeter.name} at {best.statistics.cv_percent:.1f}%")
+        lines.append(f"Most consistent (lowest CV): {best.ammeter.name} at {_num(best.statistics.cv_percent)}%")
     if with_accuracy:
         accurate = min(results, key=lambda r: r.accuracy.mean_abs_error_percent if r.accuracy else float("inf"))
         if accurate.accuracy is not None:
             lines.append(
                 f"Most accurate (lowest mean abs error): {accurate.ammeter.name} "
-                f"at {accurate.accuracy.mean_abs_error_percent:.1f}%"
+                f"at {_num(accurate.accuracy.mean_abs_error_percent)}%"
             )
     return "\n".join(lines)
 

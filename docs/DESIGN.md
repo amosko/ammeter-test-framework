@@ -47,7 +47,7 @@ systems oversleep: macOS lets a 100 ms sleep overshoot by up to 10 ms. Measured 
 | Absolute deadline, halving sleeps, 2 ms spin | 0.01 ms          | 0.006 ms |
 
 Every run records its own max schedule error and request latencies, so timing quality is part of the
-result rather than an assumption. Spinning costs 2 ms of CPU per sample (2% at 10 Hz).
+result rather than an assumption. Spinning costs 2 ms of CPU per sample (2% at 10 Hz) on macOS and Linux.
 
 **Error handling.** The transport maps every failure to one of three typed errors with a message that
 says what to check. `run_test` takes one reading before the timed run so an unreachable device fails in
@@ -91,7 +91,7 @@ without calibration, which is why the ranking uses CV.
 
 `tests/` starts every emulator once per session on a free port, so the suite needs no running
 `main.py` and never collides with the default ports. Protocol edge cases (silent device, garbage,
-split reply, reset) use a tiny one-shot fake server. CLI tests drive `main(argv)` directly and one test
+empty and split replies, refused connection) use a tiny one-shot fake server. CLI tests drive `main(argv)` directly and one test
 exercises `--start-emulators` end to end, including that the subprocess is stopped afterwards.
 
 ## Fixes to the original code
@@ -117,14 +117,14 @@ Runtime: PyYAML, matplotlib (optional). Development: pytest, mypy, ruff, types-P
 ## Cross-platform notes
 
 Pure standard library networking and timing, `pathlib` paths, `matplotlib` in headless (`Agg`) mode.
-On Windows with Python older than 3.11, `time.sleep` has ~15 ms granularity; the schedule error reported
-per run shows the effect. On macOS, port 5000 may be taken by AirPlay Receiver; change it in the config.
+On Windows with Python older than 3.11, `time.sleep` has ~15 ms granularity, so the spin window is 20 ms
+there instead of 2 ms; the schedule error reported per run shows the actual effect. On macOS, port 5000 may be taken by AirPlay Receiver; change it in the config.
 
 ## Extending
 
 - New ammeter of an existing kind: add a config entry.
-- New transport (serial, Modbus): implement an object with `measure() -> float`, raising `AmmeterError`
-  subclasses, and pass its `measure` to `collect_samples`, or give `Ammeter` a factory keyed by a config
-  field. Nothing downstream changes.
+- New transport (serial, Modbus): subclass `AmmeterTestFramework` and override `make_measure(spec)` to
+  return any callable that yields amperes and raises `AmmeterError` for a failed reading. Sampling,
+  analysis, verdicts and the archive stay unchanged.
 - New criteria or metrics: `analysis.py` is the only place to touch; `RunResult` serialises whatever
   dataclasses it holds.

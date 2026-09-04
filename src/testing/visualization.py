@@ -53,7 +53,8 @@ def plot_comparison(results: Sequence[RunResult], path: Path) -> Optional[Path]:
     ax_box.set_yscale("log")
     ax_box.set(ylabel="current [A]", title="reading distribution (log scale)")
 
-    ax_cv.bar(names, [r.statistics.cv_percent or 0 for r in results if r.statistics], color="C1")
+    cv = {r.ammeter.name: r.statistics.cv_percent for r in results if r.statistics and r.statistics.cv_percent}
+    ax_cv.bar(list(cv), list(cv.values()), color="C1")
     ax_cv.set(ylabel="CV [%]", title="precision: coefficient of variation (lower is better)")
 
     fig.tight_layout()

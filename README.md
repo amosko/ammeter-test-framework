@@ -45,12 +45,24 @@ background for the duration of the run.
 Sample output of `run` for one ammeter:
 
 ```
-Run 20260904_190213_entes_9f1c2a7b  [PASS]
+Run 20260904_184727_entes_af952ef9  [PASS]
   ammeter   entes @ localhost:5001  label: baseline
   samples   50/50 ok, 10 Hz, 4.90 s (scheduled 4.90 s)
-  timing    max schedule error 0.03 ms, latency mean 1.55 ms / max 1.90 ms
-  current   mean 75.02 A, median 65.02 A, stdev 44.11 A, min 15.32 A, max 181.7 A, CV 58.8%
-  plot      results/20260904_190213_entes_9f1c2a7b.png
+  timing    max schedule error 0.01 ms, latency mean 1.71 ms / max 2.24 ms
+  current   mean 70.59 A, median 59.38 A, stdev 46.05 A, min 12.59 A, max 185.1 A, CV 65.23%
+  plot      results/20260904_184727_entes_af952ef9.png
+```
+
+`compare --latest` after a full run:
+
+```
+Comparison of 3 runs
+ammeter   run_id                             mean [A]  median [A]  stdev [A]  CV %   failed/total  latency [ms]
+--------  ---------------------------------  --------  ----------  ---------  -----  ------------  ------------
+circutor  20260904_184732_circutor_a56aeb12  0.03078   0.02998     0.01408    45.74  0/50          1.64
+entes     20260904_184727_entes_af952ef9     70.59     59.38       46.05      65.23  0/50          1.71
+greenlee  20260904_184722_greenlee_6cfe8670  0.2963    0.1146      0.8954     302.2  0/50          1.46
+Most consistent (lowest CV): circutor at 45.74%
 ```
 
 ## Commands
@@ -126,7 +138,8 @@ precision measure that can be compared across ammeters with very different curre
 `--reference`, it also ranks by mean absolute error against the reference current.
 
 The `results/` directory in this repository contains sample runs; `results/logs/` holds one log file per
-`run` invocation and is not committed.
+`run` invocation and is not committed. A relative results directory is resolved from the current working
+directory, so run the commands from the repository root.
 
 ## The emulators
 
@@ -167,7 +180,7 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 
 ```sh
 pip install -r requirements-dev.txt
-python -m pytest            # 75 tests, about 2 seconds; starts emulators on free ports by itself
+python -m pytest            # 84 tests, about 2 seconds; starts emulators on free ports by itself
 python -m ruff check .
 python -m mypy main.py run_tests.py Ammeters src tests examples
 ```

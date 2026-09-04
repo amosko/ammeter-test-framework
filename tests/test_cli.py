@@ -1,10 +1,11 @@
+import socket
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from src.testing.cli import main
-from tests.conftest import free_port
+from tests.helpers import free_port
 
 CONFIG_TEMPLATE = """
 ammeters:
@@ -73,7 +74,8 @@ def test_usage_errors(cli: Callable[..., int], capsys: pytest.CaptureFixture[str
     assert "unknown ammeter 'fluke'" in capsys.readouterr().err
 
     assert cli("run", "--duration", "9", "--no-plot") == 2
-    assert "give only two" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "give only two" in err and "--duration was combined with the config" in err
 
     assert cli("show", "missing_run") == 2
     assert "no run 'missing_run'" in capsys.readouterr().err
@@ -87,6 +89,19 @@ def test_unreachable_ammeter_hint(tmp_path: Path, capsys: pytest.CaptureFixture[
     config.write_text(CONFIG_TEMPLATE.format(greenlee=free_port(), entes=free_port()), encoding="utf-8")
     assert main(["--config", str(config), "--results-dir", str(tmp_path), "run", "greenlee", "--no-plot"]) == 1
     assert "python main.py" in capsys.readouterr().err
+
+
+def test_start_emulators_reports_why_main_py_died(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    taken = socket.socket()
+    taken.bind(("localhost", 0))
+    taken.listen()
+    with taken:
+        config = tmp_path / "taken.yaml"
+        config.write_text(CONFIG_TEMPLATE.format(greenlee=taken.getsockname()[1], entes=free_port()), encoding="utf-8")
+        exit_code = main(["--config", str(config), "--results-dir", str(tmp_path), "run", "--start-emulators"])
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "main.py exited" in err and "already in use" in err and "pass --start-emulators" not in err
 
 
 def test_start_emulators_runs_main_py(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

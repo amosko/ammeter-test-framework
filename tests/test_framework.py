@@ -3,10 +3,10 @@ import dataclasses
 import pytest
 
 from Ammeters.client import AmmeterConnectionError, AmmeterError
-from src.testing.ammeter import FaultInjector
+from src.testing.ammeter import FaultInjector, Measure
 from src.testing.framework import AmmeterTestFramework
-from src.utils.config import Config, ConfigError
-from tests.conftest import free_port
+from src.utils.config import AmmeterSpec, Config, ConfigError
+from tests.helpers import free_port
 
 
 def test_run_test_samples_evaluates_and_archives(config: Config) -> None:
@@ -47,6 +47,16 @@ def test_simulated_failures_are_reported(config: Config) -> None:
     assert not result.verdict.passed
     assert result.verdict.reasons == ["5 of 5 samples failed (100%, limit 5%)"]
     assert result.metadata["simulated_failure_rate"] == 1.0
+
+
+def test_make_measure_hook_swaps_the_transport(config: Config) -> None:
+    class ConstantFramework(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            return lambda: 4.2
+
+    result = ConstantFramework(config).run_test("greenlee")
+    assert result.statistics is not None and result.statistics.mean == 4.2
+    assert result.verdict.passed
 
 
 def test_fault_injector_is_reproducible_with_a_seed() -> None:

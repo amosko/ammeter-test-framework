@@ -12,7 +12,7 @@ from Ammeters.client import (
     wait_for_ammeter,
 )
 from src.utils.config import AmmeterSpec
-from tests.conftest import free_port
+from tests.helpers import free_port
 
 
 def one_shot_server(*chunks: bytes, hold: bool = False) -> int:

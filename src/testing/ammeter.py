@@ -7,7 +7,7 @@ from typing import Optional
 from Ammeters.client import AmmeterError, read_current
 from src.utils.config import AmmeterSpec
 
-Measure = Callable[[], float]
+Measure = Callable[[], float]  # returns amperes; raises AmmeterError for a failed reading
 
 
 class Ammeter:

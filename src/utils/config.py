@@ -1,5 +1,6 @@
 """Typed, validated access to config/config.yaml."""
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,8 @@ class AmmeterSpec:
     expected_max_a: Optional[float] = None
 
     def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.name):
+            raise ConfigError(f"ammeter name '{self.name}' may only contain letters, digits, '_', '-' and '.'")
         if not 1 <= self.port <= 65535:
             raise ConfigError(f"ammeter '{self.name}': port {self.port} is out of range")
         if self.timeout_s <= 0:
@@ -133,11 +136,11 @@ def _value(section: dict[str, Any], key: str, convert: Callable[[Any], T], defau
 
 def _convert(key: str, raw: Any, convert: Callable[[Any], T]) -> T:
     if isinstance(raw, bool) != (convert is bool):  # YAML true/false is not a number, and "false" is not a bool
-        raise ConfigError(f"'{key}' must be a {convert.__name__}, got {raw!r}")
+        raise ConfigError(f"'{key}' must be {convert.__name__}, got {raw!r}")
     try:
         return convert(raw)
     except (TypeError, ValueError):
-        raise ConfigError(f"'{key}' must be a {convert.__name__}, got {raw!r}") from None
+        raise ConfigError(f"'{key}' must be {convert.__name__}, got {raw!r}") from None
 
 
 def _parse_ammeter(name: str, entry: Any, timeout_s: float) -> AmmeterSpec:
