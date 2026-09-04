@@ -10,7 +10,7 @@ from src.testing.ammeter import Measure
 
 logger = logging.getLogger(__name__)
 
-SPIN_WINDOW_S = 0.002  # sleep until this close to a deadline, then busy-wait: keeps timing error far below 1 ms
+SPIN_WINDOW_S = 0.002  # busy-wait for the last 2 ms before each deadline: schedule error stays far below 1 ms
 
 
 @dataclass(frozen=True)
@@ -94,15 +94,20 @@ def collect_samples(measure: Measure, plan: SamplingPlan) -> list[Sample]:
             error = str(exc)
             logger.warning("sample %d failed: %s", index, exc)
         latency_ms = (time.perf_counter() - sent_at) * 1000
+        if value is not None:
+            logger.debug("sample %d: %.4g A in %.2f ms", index, value, latency_ms)
 
         samples.append(Sample(index, scheduled, sent_at - start, latency_ms, value, error))
     return samples
 
 
 def _wait_until(deadline: float) -> None:
-    """Sleep most of the way, then spin. Deadlines are absolute, so sleep overshoot cannot accumulate."""
-    remaining = deadline - time.perf_counter() - SPIN_WINDOW_S
-    if remaining > 0:
-        time.sleep(remaining)
+    """Sleep in halving steps, then spin for the last moments.
+
+    Deadlines are absolute, so sleep overshoot cannot accumulate; halving keeps each overshoot inside the
+    spin window even on systems that oversleep by up to 50% (macOS timer coalescing).
+    """
+    while (remaining := deadline - time.perf_counter()) > SPIN_WINDOW_S:
+        time.sleep((remaining - SPIN_WINDOW_S) / 2)
     while time.perf_counter() < deadline:
         pass

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Optional
 
-from src.testing.sampling import Sample, SamplingPlan
+from src.testing.sampling import Sample
 from src.utils.config import AmmeterSpec
 
 
@@ -38,20 +38,20 @@ class Statistics:
 
 @dataclass(frozen=True)
 class TimingStats:
-    planned_duration_s: float
-    actual_duration_s: float
-    max_timing_error_ms: float  # largest deviation of a request from its schedule
+    planned_span_s: float  # when the last sample was scheduled, relative to the first
+    actual_span_s: float  # when the last sample's reply arrived
+    max_schedule_error_ms: float  # largest deviation of a request from its scheduled time
     mean_latency_ms: float
     max_latency_ms: float
 
     @classmethod
-    def from_samples(cls, samples: Sequence[Sample], plan: SamplingPlan) -> "TimingStats":
+    def from_samples(cls, samples: Sequence[Sample]) -> "TimingStats":
         latencies = [s.latency_ms for s in samples]
         last = samples[-1]
         return cls(
-            planned_duration_s=plan.duration_s,
-            actual_duration_s=last.measured_at_s + last.latency_ms / 1000,
-            max_timing_error_ms=max(abs(s.measured_at_s - s.scheduled_s) for s in samples) * 1000,
+            planned_span_s=last.scheduled_s,
+            actual_span_s=last.measured_at_s + last.latency_ms / 1000,
+            max_schedule_error_ms=max(abs(s.measured_at_s - s.scheduled_s) for s in samples) * 1000,
             mean_latency_ms=statistics.fmean(latencies),
             max_latency_ms=max(latencies),
         )

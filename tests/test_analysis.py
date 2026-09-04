@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 
 from src.testing.analysis import AccuracyStats, Statistics, TimingStats, evaluate
-from src.testing.sampling import Sample, SamplingPlan
+from src.testing.sampling import Sample
 from src.utils.config import AmmeterSpec
 
 SPEC = AmmeterSpec("test", "localhost", 1, "CMD", expected_min_a=0.0, expected_max_a=10.0)
@@ -38,10 +38,10 @@ def test_no_values_is_an_error() -> None:
 
 def test_timing_stats() -> None:
     samples = [sample(0), sample(1, late_ms=0.5), sample(2, late_ms=2.0)]
-    timing = TimingStats.from_samples(samples, SamplingPlan(count=3, interval_s=0.1))
-    assert timing.planned_duration_s == pytest.approx(0.3)
-    assert timing.actual_duration_s == pytest.approx(0.2 + 0.002 + 0.001)
-    assert timing.max_timing_error_ms == pytest.approx(2.0)
+    timing = TimingStats.from_samples(samples)
+    assert timing.planned_span_s == pytest.approx(0.2)
+    assert timing.actual_span_s == pytest.approx(0.2 + 0.002 + 0.001)
+    assert timing.max_schedule_error_ms == pytest.approx(2.0)
     assert timing.mean_latency_ms == timing.max_latency_ms == 1.0
 
 

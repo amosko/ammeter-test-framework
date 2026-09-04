@@ -47,7 +47,7 @@ class RunResult:
             metadata=metadata,
             samples=list(samples),
             statistics=stats,
-            timing=TimingStats.from_samples(samples, plan),
+            timing=TimingStats.from_samples(samples),
             accuracy=AccuracyStats.from_values(values, reference_a) if values and reference_a is not None else None,
             verdict=evaluate(samples, stats, spec, max_failure_rate),
         )

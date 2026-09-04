@@ -14,8 +14,8 @@ def format_run(result: RunResult) -> str:
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",
         f"  samples   {len(result.values)}/{len(result.samples)} ok, {pace}, "
-        f"{timing.actual_duration_s:.2f} s (planned {timing.planned_duration_s:.2f} s)",
-        f"  timing    max schedule error {timing.max_timing_error_ms:.2f} ms, "
+        f"{timing.actual_span_s:.2f} s (scheduled {timing.planned_span_s:.2f} s)",
+        f"  timing    max schedule error {timing.max_schedule_error_ms:.2f} ms, "
         f"latency mean {timing.mean_latency_ms:.2f} ms / max {timing.max_latency_ms:.2f} ms",
     ]
     stats = result.statistics
@@ -45,7 +45,7 @@ def format_listing(results: Sequence[RunResult]) -> str:
         [
             r.run_id,
             r.ammeter.name,
-            r.created_at,
+            r.created_at[:19].replace("T", " "),
             str(r.metadata.get("label") or "-"),
             f"{len(r.values)}/{len(r.samples)}",
             _num(r.statistics.mean if r.statistics else None),
