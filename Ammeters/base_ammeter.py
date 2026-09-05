@@ -1,7 +1,5 @@
 import os
-import random
 import socket
-import time
 from abc import ABC, abstractmethod
 
 NotImplementedErrorMsg = "Subclasses must implement this property."
@@ -9,7 +7,6 @@ NotImplementedErrorMsg = "Subclasses must implement this property."
 class AmmeterEmulatorBase(ABC):
     def __init__(self, port: int):
         self.port = port
-        random.seed(time.time())  # Seed the random number generator for each instance
 
     def start_server(self) -> None:
         """
