@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from main import EMULATORS
 from src.utils.config import DEFAULT_CONFIG_PATH, Config, ConfigError
 
 MINIMAL: dict[str, Any] = {
@@ -26,6 +27,16 @@ def test_shipped_config_matches_the_emulators() -> None:
     assert config.ammeter("circutor").command == "MEASURE_CIRCUTOR -get_measurement -current"
     assert config.sample_count == 50 and config.frequency_hz == 10 and config.duration_s is None
     assert config.max_failure_rate == 0.05 and config.max_schedule_error_ms == 10
+
+
+def test_shipped_config_commands_match_the_emulator_definitions() -> None:
+    """The config is the datasheet; assert it against the devices, not against a literal in this file."""
+    config = Config.load(DEFAULT_CONFIG_PATH)
+    for name, emulator_class in EMULATORS.items():
+        spec = config.ammeter(name)
+        assert spec.command.encode() == emulator_class(spec.port).get_current_command, (
+            f"config command for {name} does not match {emulator_class.__name__}"
+        )
 
 
 def test_minimal_config_uses_defaults() -> None:

@@ -101,6 +101,11 @@ and never collides with the default ports. Protocol edge cases (silent device, g
 replies, refused connection) use a tiny one-shot fake server. CLI tests drive `main(argv)` directly and
 cover `--start-emulators` end to end, including that the subprocess is stopped afterwards.
 
+The shipped config's commands are asserted against `get_current_command` on the emulator classes rather
+than against string literals in the test, so config drift fails the suite instead of surfacing as a
+silent empty reply — which is exactly how the original defect presented. Its `expected_range_a` values
+are pinned the same way, against 200 readings from each emulator.
+
 ## Fixes to the original code
 
 | File | Problem | Fix |
