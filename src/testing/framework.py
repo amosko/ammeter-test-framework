@@ -2,6 +2,8 @@
 
 import logging
 import platform
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
@@ -52,7 +54,7 @@ class AmmeterTestFramework:
         pace = f"at {plan.frequency_hz:g} Hz" if plan.frequency_hz else "as fast as possible"
         logger.info("%s: taking %d samples %s", spec.name, plan.count, pace)
         started = datetime.now().astimezone()
-        samples = collect_samples(measure, plan)
+        samples = collect_samples(measure, plan, spec.name)
 
         metadata = {
             "label": label,
@@ -81,5 +83,21 @@ class AmmeterTestFramework:
         logger.info("%s: %s, saved %s", spec.name, "PASS" if result.verdict.passed else "FAIL", path)
         return result
 
+    def run_selected(self, names: Sequence[str], label: Optional[str] = None) -> list[RunResult]:
+        """Sample the named ammeters over the same window, one worker each. Results follow the order given.
+
+        Safe because each ammeter is its own single-threaded server on its own port, so the workers
+        contend for nothing. Leaving the `with` block waits for every worker; .result() then re-raises
+        the first failure in the order given rather than in completion order, so the error a user sees
+        is deterministic.
+        """
+        for name in names:
+            self.config.ammeter(name)  # fail on an unknown name before starting any thread
+        if len(names) < 2:  # no pool for a single ammeter: no thread overhead, behaviour identical
+            return [self.run_test(name, label) for name in names]
+        with ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="ammeter") as pool:
+            futures = [pool.submit(self.run_test, name, label) for name in names]
+        return [future.result() for future in futures]
+
     def run_all(self, label: Optional[str] = None) -> list[RunResult]:
-        return [self.run_test(name, label) for name in self.config.ammeters]
+        return self.run_selected(list(self.config.ammeters), label)

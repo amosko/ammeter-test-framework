@@ -1,10 +1,11 @@
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from src.testing.cli import main
-from src.testing.results import ResultsArchive
+from src.testing.results import ResultsArchive, RunResult
 from tests.helpers import free_port
 
 CONFIG_TEMPLATE = """
@@ -65,6 +66,21 @@ def test_run_writes_plots(cli: Callable[..., int], tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     assert cli("run", "greenlee", "--count", "3", "--frequency", "100") == 0
     assert len(list((tmp_path / "results").glob("*.png"))) == 1
+
+
+def test_plotting_stays_on_the_main_thread(cli: Callable[..., int], monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sampling is concurrent, plotting is not: pyplot is a global state machine and is not thread-safe,
+    so the reporting loop runs on the main thread once every worker has finished."""
+    callers: list[str] = []
+
+    def record(result: RunResult, path: Path) -> Path:
+        callers.append(threading.current_thread().name)
+        return path
+
+    monkeypatch.setattr("src.testing.cli.plot_run", record)
+    monkeypatch.setattr("src.testing.cli.plot_comparison", lambda results, path: path)
+    assert cli("run") == 0
+    assert callers == [threading.main_thread().name] * 2  # one per ammeter, none from a worker
 
 
 def test_failed_verdict_sets_exit_code(cli: Callable[..., int], capsys: pytest.CaptureFixture[str]) -> None:

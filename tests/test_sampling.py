@@ -50,7 +50,7 @@ def test_invalid_plans_are_rejected(kwargs: dict[str, Any]) -> None:
 
 def test_samples_follow_the_schedule() -> None:
     plan = SamplingPlan(count=20, interval_s=0.01)
-    samples = collect_samples(lambda: 1.0, plan)
+    samples = collect_samples(lambda: 1.0, plan, "greenlee")
 
     assert [s.index for s in samples] == list(range(20))
     assert all(s.ok and s.value_a == 1.0 for s in samples)
@@ -60,7 +60,7 @@ def test_samples_follow_the_schedule() -> None:
 
 def test_unpaced_sampling_does_not_wait() -> None:
     started = time.perf_counter()
-    samples = collect_samples(lambda: 1.0, SamplingPlan(count=100, interval_s=0))
+    samples = collect_samples(lambda: 1.0, SamplingPlan(count=100, interval_s=0), "greenlee")
     assert len(samples) == 100
     assert time.perf_counter() - started < 0.5
 
@@ -74,7 +74,7 @@ def test_failures_are_recorded_not_raised() -> None:
             raise outcome
         return outcome
 
-    samples = collect_samples(measure, SamplingPlan(count=3, interval_s=0))
+    samples = collect_samples(measure, SamplingPlan(count=3, interval_s=0), "greenlee")
     assert [s.value_a for s in samples] == [1.0, None, 3.0]
     assert [s.error for s in samples] == [None, "boom", None]
 
@@ -84,5 +84,5 @@ def test_latency_is_measured() -> None:
         time.sleep(0.01)
         return 1.0
 
-    (sample,) = collect_samples(slow_measure, SamplingPlan(count=1, interval_s=0))
+    (sample,) = collect_samples(slow_measure, SamplingPlan(count=1, interval_s=0), "greenlee")
     assert sample.latency_ms >= 10

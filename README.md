@@ -45,6 +45,11 @@ python run_tests.py compare --latest             # latest run of every ammeter, 
 Single-terminal alternative: `python run_tests.py run --start-emulators` starts `main.py` in the
 background for the duration of the run.
 
+The ammeters are sampled concurrently, one worker each, so a full run covers a single measurement window
+rather than three consecutive ones — the shipped 50 samples at 10 Hz take about 5 seconds in total, not
+15, and the three ammeters are directly comparable because they were measured at the same time. The
+reports print together once every ammeter has finished.
+
 Progress goes to stderr as `[INFO]` lines; the report goes to stdout:
 
 ```
@@ -72,7 +77,7 @@ Most consistent (lowest CV): circutor at 49.1%
 
 | Command                         | What it does                                                          |
 |---------------------------------|-----------------------------------------------------------------------|
-| `run [AMMETER ...]`             | Sample the named ammeters (default: all), report, archive, plot        |
+| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive, plot |
 | `list`                          | Table of archived runs                                                 |
 | `show RUN_ID`                   | Report of one archived run                                             |
 | `compare RUN_ID ... / --latest` | Precision ranking of several runs, plus a comparison plot              |
@@ -182,7 +187,7 @@ src/testing/
   sampling.py             SamplingPlan and scheduled sample collection
   analysis.py             statistics, timing, accuracy, verdict
   results.py              RunResult and the JSON archive
-  framework.py            AmmeterTestFramework: run_test / run_all
+  framework.py            AmmeterTestFramework: run_test / run_selected / run_all
   reporting.py            text reports and comparison table
   visualization.py        matplotlib plots (optional)
   cli.py                  argparse commands

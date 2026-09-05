@@ -79,8 +79,12 @@ class Sample:
         return self.error is None
 
 
-def collect_samples(measure: Measure, plan: SamplingPlan) -> list[Sample]:
-    """Take plan.count measurements on a fixed schedule. Failed measurements are recorded, not raised."""
+def collect_samples(measure: Measure, plan: SamplingPlan, name: str) -> list[Sample]:
+    """Take plan.count measurements on a fixed schedule. Failed measurements are recorded, not raised.
+
+    `name` is required rather than defaulted: concurrent samplers interleave their log lines, and a
+    default would let a future call site quietly reintroduce anonymous ones.
+    """
     samples = []
     start = time.perf_counter()
     for index in range(plan.count):
@@ -94,10 +98,10 @@ def collect_samples(measure: Measure, plan: SamplingPlan) -> list[Sample]:
             value = measure()
         except AmmeterError as exc:
             error = str(exc)
-            logger.warning("sample %d failed: %s", index, exc)
+            logger.warning("%s sample %d failed: %s", name, index, exc)
         latency_ms = (time.perf_counter() - sent_at) * 1000
         if value is not None:
-            logger.debug("sample %d: %.4g A in %.2f ms", index, value, latency_ms)
+            logger.debug("%s sample %d: %.4g A in %.2f ms", name, index, value, latency_ms)
 
         samples.append(Sample(index, scheduled, sent_at - start, latency_ms, value, error))
     return samples

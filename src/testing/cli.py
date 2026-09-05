@@ -107,18 +107,15 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
     except ValueError as exc:
         raise ValueError(f"{exc}{_sampling_hint(args)}") from None
     names = args.ammeters or list(config.ammeters)
-    for name in names:
-        config.ammeter(name)
 
-    results: list[RunResult] = []
     with _emulators(config, args.config, names) if args.start_emulators else contextlib.nullcontext():
-        for name in names:
-            result = framework.run_test(name, args.label)
-            results.append(result)
-            print(format_run(result))
-            if config.plots_enabled:
-                _print_plot(plot_run(result, framework.archive.path_for(result.run_id, ".png")))
-            print()
+        results = framework.run_selected(names, args.label)
+
+    for result in results:  # reporting stays on the main thread: pyplot is a global, not thread-safe
+        print(format_run(result))
+        if config.plots_enabled:
+            _print_plot(plot_run(result, framework.archive.path_for(result.run_id, ".png")))
+        print()
 
     if len(results) > 1:
         _print_comparison(results, framework, config.plots_enabled)

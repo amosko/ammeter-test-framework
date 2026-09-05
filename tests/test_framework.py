@@ -1,4 +1,6 @@
 import dataclasses
+import threading
+import time
 
 import pytest
 
@@ -24,6 +26,72 @@ def test_run_all_covers_every_configured_ammeter(config: Config) -> None:
     results = AmmeterTestFramework(config).run_all()
     assert [r.ammeter.name for r in results] == ["greenlee", "entes", "circutor"]
     assert all(r.verdict.passed for r in results)
+
+
+def test_run_all_samples_the_ammeters_over_the_same_window(config: Config) -> None:
+    """The point of the change: readings taken in one window are commensurable, readings taken in three
+    consecutive windows silently absorb anything about the host that changed between them."""
+    started = time.monotonic()
+    results = AmmeterTestFramework(config).run_all()
+    elapsed = time.monotonic() - started
+
+    longest = max(r.timing.actual_span_s for r in results)
+    assert elapsed < longest * len(results)  # loose on purpose: a tight wall-clock bound is a flaky test
+
+
+def test_every_ammeter_gets_its_own_worker(config: Config) -> None:
+    threads: dict[str, str] = {}
+
+    class RecordingFramework(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            def measure() -> float:
+                threads[spec.name] = threading.current_thread().name
+                return 1.0
+
+            return measure
+
+    RecordingFramework(config).run_all()
+    assert len(set(threads.values())) == 3
+    assert all(name.startswith("ammeter") for name in threads.values())
+
+
+def test_a_single_ammeter_stays_on_the_calling_thread(config: Config) -> None:
+    """No pool for one ammeter: no thread overhead and behaviour identical to before the change."""
+    threads: dict[str, str] = {}
+
+    class RecordingFramework(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            def measure() -> float:
+                threads[spec.name] = threading.current_thread().name
+                return 1.0
+
+            return measure
+
+    RecordingFramework(config).run_selected(["greenlee"])
+    assert threads == {"greenlee": threading.current_thread().name}
+
+
+def test_run_selected_returns_results_in_the_order_given(config: Config) -> None:
+    results = AmmeterTestFramework(config).run_selected(["circutor", "greenlee"])
+    assert [r.ammeter.name for r in results] == ["circutor", "greenlee"]
+
+
+def test_run_selected_rejects_an_unknown_name_before_starting_any_thread(config: Config) -> None:
+    with pytest.raises(ConfigError, match="unknown ammeter 'fluke'"):
+        AmmeterTestFramework(config).run_selected(["greenlee", "fluke"])
+    assert not config.results_dir.exists()
+
+
+def test_an_unreachable_ammeter_does_not_lose_the_others(config: Config) -> None:
+    """.result() re-raises so the console shows only the error, but no data is lost: run_test archives
+    each result before returning, so the runs that completed are on disk and `list` shows them."""
+    dead = dataclasses.replace(config.ammeter("entes"), port=free_port())
+    config = dataclasses.replace(config, ammeters={**config.ammeters, "entes": dead})
+    framework = AmmeterTestFramework(config)
+
+    with pytest.raises(AmmeterConnectionError):
+        framework.run_selected(["greenlee", "entes", "circutor"])
+    assert {r.ammeter.name for r in framework.archive.load_all()} == {"greenlee", "circutor"}
 
 
 def test_unknown_ammeter(config: Config) -> None:

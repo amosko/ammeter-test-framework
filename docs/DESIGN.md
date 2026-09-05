@@ -11,12 +11,60 @@ src/testing/ammeter.py   unified API: Ammeter.measure() -> amperes, FaultInjecto
 src/testing/sampling.py  SamplingPlan + collect_samples(): timed collection, failures recorded per sample
 src/testing/analysis.py  Statistics, TimingStats, AccuracyStats, evaluate() -> Verdict
 src/testing/results.py   RunResult (everything about one run) + ResultsArchive (JSON per run)
-src/testing/framework.py AmmeterTestFramework: run_test(name) wires the pipeline together
+src/testing/framework.py AmmeterTestFramework: run_test(name) wires the pipeline together,
+                         run_selected() samples several devices over one window
 src/testing/reporting.py, visualization.py, cli.py   presentation only
 ```
 
 The sampler only needs a `Callable[[], float]`, so anything that returns amperes (a serial device, a
 mock, a fault injector wrapping a real ammeter) plugs in without touching the rest.
+
+### Concurrency
+
+`run_selected` gives each ammeter its own worker, so a three-ammeter run covers **one** wall clock window
+instead of three consecutive ones. That is what makes `compare` defensible: readings taken in the same
+window are commensurable, whereas three sequential windows silently absorb anything about the host that
+changed between them, and the CV ranking then partly measures the host. It is also three times faster —
+the shipped 50 samples at 10 Hz take about 5 s in total rather than 15.
+
+It is safe *because* each ammeter is its own single-threaded server on its own port, so three workers
+hitting three servers contend for nothing. Concurrency *within* one ammeter would serialise on that
+server's accept loop and is not what this does. Results come back in the order given, not in completion
+order, so `.result()` re-raises the first failure deterministically. A single-ammeter run skips the pool
+entirely and behaves exactly as before. Plotting stays on the main thread after every worker has
+finished: `pyplot` is a global state machine and is not thread-safe.
+
+If one ammeter is unreachable the exception surfaces before anything is printed, so the console shows
+only the error — but **no data is lost**. `run_test` archives each result before returning, so the runs
+that did complete are on disk and `run_tests.py list` shows them.
+
+**The scheduler interaction, measured.** `_wait_until` sleeps in halving steps and then busy-spins for
+the last `SPIN_WINDOW_S` (2 ms off Windows). `time.sleep` releases the GIL; the spin does not. The three
+workers do start together — their `collect_samples` start times were measured 0.12 ms apart — so their
+deadlines coincide and their spin windows genuinely overlap. The cost is nevertheless small, because a
+worker spins only until *its own* deadline and then blocks on the socket, releasing the GIL: the measured
+spin is 0.118 ms at the median and never exceeded 2.4 ms, and a worker whose deadline has already passed
+exits its spin immediately rather than adding to the queue. The worst case is therefore bounded by
+(N − 1) × `SPIN_WINDOW_S`, which is 4 ms for three ammeters, still inside the 10 ms criterion.
+
+Measured on macOS 26 / Python 3.9, shipped config (10 Hz, 50 samples), fresh process per run:
+
+| Sampling                                     | Max schedule error | Runs |
+|----------------------------------------------|--------------------|------|
+| One ammeter alone (no pool)                  | 0.01 – 0.12 ms     | 5    |
+| Three concurrently                           | 0.15 – 0.90 ms     | 15   |
+| Three concurrently, all 12 cores saturated   | 0.01 – 0.80 ms     | 18   |
+
+So concurrency costs roughly half a millisecond of schedule accuracy against a 10 ms criterion, and
+holds up with the machine fully loaded. The GIL switch interval was left alone: shortening it to 0.5 ms
+(the obvious mitigation) moved the median from 0.711 ms to 0.643 ms and made the maximum *worse*
+(2.934 → 3.502 ms), so a process-global mutation was not worth its complexity.
+
+The caveat is that the spin window is per thread, so N concurrent ammeters spin N times as much. That is
+negligible at the shipped 10 Hz and worth knowing above roughly 100 Hz or with many more devices. At
+100 Hz the tail grows for both modes — sequential reached 6.5 ms and concurrent 3.6 ms over 15 runs each
+in one long-lived process — but that is dominated by GC pauses landing inside a 10 ms interval, which is
+a pre-existing property of the sampler and not something concurrency introduced.
 
 ## Decisions
 
@@ -186,8 +234,6 @@ shows the actual effect on any host.
 
 - Error simulation has one mode (a failed reading). Simulated timeouts, garbage replies or latency
   spikes would follow the same wrapper pattern.
-- Ammeters are sampled one after another; sampling several concurrently would need one thread per
-  device and per-thread logging.
 - CV is a fair precision measure for the two well-behaved emulators but is dominated by outliers for
   Greenlee; a robust alternative (median absolute deviation) would be a one-line addition to
   `Statistics`.

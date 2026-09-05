@@ -34,6 +34,6 @@ framework_wait = sampling._wait_until
 
 for name, wait in (("single sleep then spin", single_sleep), ("halving sleeps then spin", framework_wait)):
     sampling._wait_until = wait
-    timing = TimingStats.from_samples(collect_samples(fake_measure, plan))
+    timing = TimingStats.from_samples(collect_samples(fake_measure, plan, "probe"))
     print(f"{name:26s} {frequency:g} Hz x {count}: max schedule error {timing.max_schedule_error_ms:.3f} ms")
 sampling._wait_until = framework_wait
