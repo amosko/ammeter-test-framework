@@ -66,8 +66,10 @@ added nothing for a few dozen numbers. matplotlib is imported lazily and is opti
 **Results archive.** One JSON file per run named `<start time>_<ammeter>_<8 hex chars>` so ids are unique,
 human readable and chronological when sorted. The file is self-contained: spec, plan, metadata, every
 sample, statistics, timing, accuracy and verdict, and round-trips back into `RunResult` for `show` and
-`compare`. Files that are not run files are reported with their path and skipped. Plots sit next to the
-JSON under the same id.
+`compare`. It is written to `<run_id>.json.tmp` and moved into place with `os.replace`, so an interrupted
+write cannot leave a half-parsed run in the archive; the temp name stays outside the `*.json` glob, so a
+leftover from a crash can never be read back as a run. Files that are not run files are reported with
+their path and skipped. Plots sit next to the JSON under the same id.
 
 **Error simulation.** `FaultInjector` wraps any measure function and raises `AmmeterError` for a random
 fraction of calls, seeded for reproducibility. It exercises the whole failure path (per-sample errors,
