@@ -25,6 +25,9 @@ testing:
   timeout_seconds: 2.0                 # per connect and per reply
   max_failure_rate: 0.05               # a run fails if more than this fraction of samples fail
   max_schedule_error_ms: 10            # or if a sample is taken this late; null disables the check
+  retry:
+    attempts: 2                        # total attempts per sample, not extra tries; 1 disables retrying
+    backoff_seconds: 0.005             # linear: attempt n waits n * backoff; the budget must fit the interval
   error_simulation:
     failure_rate: 0.0                  # 0.0-1.0, randomly fails samples to exercise error handling
     seed: null

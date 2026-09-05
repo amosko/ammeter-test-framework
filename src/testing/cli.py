@@ -69,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--reference", type=float, metavar="AMPERES", help="known reference current, enables accuracy metrics"
     )
     run.add_argument("--simulate-errors", type=float, metavar="RATE", help="fail this fraction of samples (0-1)")
+    run.add_argument("--retry-attempts", type=int, metavar="N", help="attempts per sample (1 disables retrying)")
     run.add_argument("--seed", type=int, help="seed for error simulation")
     run.add_argument("--no-plot", action="store_true", help="skip the PNG plots")
     run.add_argument("--start-emulators", action="store_true", help="run main.py in the background for this run")
@@ -95,6 +96,7 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
         "frequency_hz": args.frequency,
         "reference_current_a": args.reference,
         "simulated_failure_rate": args.simulate_errors,
+        "retry_attempts": args.retry_attempts,
         "simulation_seed": args.seed,
         "plots_enabled": False if args.no_plot else None,
     }

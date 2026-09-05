@@ -5,10 +5,10 @@ import platform
 from datetime import datetime
 from typing import Optional
 
-from src.testing.ammeter import Ammeter, FaultInjector, Measure
+from src.testing.ammeter import Ammeter, FaultInjector, Measure, Retrying
 from src.testing.results import ResultsArchive, RunResult
 from src.testing.sampling import SamplingPlan, collect_samples
-from src.utils.config import AmmeterSpec, Config
+from src.utils.config import AmmeterSpec, Config, ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +19,25 @@ class AmmeterTestFramework:
         self.archive = ResultsArchive(config.results_dir)
 
     def sampling_plan(self) -> SamplingPlan:
-        return SamplingPlan.resolve(self.config.sample_count, self.config.duration_s, self.config.frequency_hz)
+        """Resolve the plan and reject a retry budget that cannot fit inside one sampling interval."""
+        plan = SamplingPlan.resolve(self.config.sample_count, self.config.duration_s, self.config.frequency_hz)
+        budget = self.config.retry_budget_s
+        if plan.interval_s and budget >= plan.interval_s:
+            # Backoff sleeps inside a sample's slot, so an oversized budget would push every later sample
+            # late and fail max_schedule_error_ms for a reason that has nothing to do with the device.
+            raise ConfigError(
+                f"the retry budget of {budget * 1000:.0f} ms per sample does not fit in the "
+                f"{plan.interval_s * 1000:.0f} ms sampling interval; lower testing.retry.attempts or "
+                f"backoff_seconds, or sample more slowly"
+            )
+        return plan
 
     def make_measure(self, spec: AmmeterSpec) -> Measure:
         """Override to use another transport; the callable must raise AmmeterError for a failed reading."""
-        return Ammeter(spec).measure
+        measure: Measure = Ammeter(spec).measure
+        if self.config.retry_attempts > 1:
+            measure = Retrying(measure, self.config.retry_attempts, self.config.retry_backoff_s)
+        return measure
 
     def run_test(self, ammeter_type: str, label: Optional[str] = None) -> RunResult:
         """Run one sampling test. Raises ConfigError for unknown ammeters and AmmeterError if unreachable."""
@@ -47,6 +61,8 @@ class AmmeterTestFramework:
             "simulated_failure_rate": self.config.simulated_failure_rate,
             "max_failure_rate": self.config.max_failure_rate,
             "max_schedule_error_ms": self.config.max_schedule_error_ms,
+            "retry_attempts": self.config.retry_attempts,  # a retried run has different failure semantics
+            "retry_backoff_s": self.config.retry_backoff_s,
         }
         reference = (
             spec.reference_current_a if spec.reference_current_a is not None else self.config.reference_current_a

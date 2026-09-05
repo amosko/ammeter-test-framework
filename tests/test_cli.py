@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from src.testing.cli import main
+from src.testing.results import ResultsArchive
 from tests.helpers import free_port
 
 CONFIG_TEMPLATE = """
@@ -21,6 +22,9 @@ testing:
     sampling_frequency_hz: 100
   max_failure_rate: 0.05
 """
+
+
+OVERSIZED_RETRY = "  retry:\n    attempts: 4\n    backoff_seconds: 1.0\n"
 
 
 @pytest.fixture
@@ -115,3 +119,21 @@ def test_start_emulators_runs_main_py(tmp_path: Path, capsys: pytest.CaptureFixt
     assert main([*args, "run", "--start-emulators", "--no-plot"]) == 0
     assert capsys.readouterr().out.count("[PASS]") == 2
     assert main([*args, "run", "greenlee", "--no-plot"]) == 1  # the emulators were stopped again
+
+
+def test_retry_attempts_flag_reaches_the_run(cli: Callable[..., int], tmp_path: Path) -> None:
+    assert cli("run", "greenlee", "--retry-attempts", "2", "--no-plot") == 0
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+    assert result.metadata["retry_attempts"] == 2
+
+
+def test_an_oversized_retry_budget_is_a_usage_error(
+    tmp_path: Path, emulator_ports: dict[str, int], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """4 attempts at 1 s backoff is a 6 s budget in a 10 ms slot; caught before any device is touched."""
+    config = tmp_path / "slow_retry.yaml"
+    config.write_text(CONFIG_TEMPLATE.format(**emulator_ports) + OVERSIZED_RETRY, encoding="utf-8")
+    assert main(["--config", str(config), "--results-dir", str(tmp_path / "results"), "run", "--no-plot"]) == 2
+    err = capsys.readouterr().err
+    assert "retry budget" in err and "--duration" not in err  # the sampling hint would be nonsense here
+    assert not list((tmp_path / "results").glob("*.json"))  # no device was touched, nothing archived

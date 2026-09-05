@@ -54,6 +54,8 @@ class Config:
     frequency_hz: Optional[float]
     max_failure_rate: float
     max_schedule_error_ms: Optional[float]  # None disables the timing criterion
+    retry_attempts: int  # total attempts per sample, not extra tries; 1 disables retrying
+    retry_backoff_s: float  # linear: attempt n sleeps n * backoff before the next try
     simulated_failure_rate: float
     simulation_seed: Optional[int]
     reference_current_a: Optional[float]
@@ -68,6 +70,15 @@ class Config:
             raise ConfigError("'reference_current_a' must not be zero")
         if self.max_schedule_error_ms is not None and self.max_schedule_error_ms <= 0:
             raise ConfigError("'max_schedule_error_ms' must be positive")
+        if self.retry_attempts < 1:
+            raise ConfigError(f"'attempts' must be at least 1, got {self.retry_attempts}")
+        if self.retry_backoff_s < 0:
+            raise ConfigError(f"'backoff_seconds' must not be negative, got {self.retry_backoff_s}")
+
+    @property
+    def retry_budget_s(self) -> float:
+        """Worst-case time spent sleeping between retries for one sample."""
+        return sum(self.retry_backoff_s * n for n in range(1, self.retry_attempts))
 
     def ammeter(self, name: str) -> AmmeterSpec:
         try:
@@ -84,6 +95,7 @@ class Config:
         testing = _section(data, "testing")
         sampling = _section(testing, "sampling")
         simulation = _section(testing, "error_simulation", required=False)
+        retry = _section(testing, "retry", required=False)
         analysis = _section(data, "analysis", required=False)
         visualization = _section(analysis, "visualization", required=False)
         results = _section(data, "result_management", required=False)
@@ -100,6 +112,8 @@ class Config:
             frequency_hz=_optional(sampling, "sampling_frequency_hz", float),
             max_failure_rate=_value(testing, "max_failure_rate", float, 0.0),
             max_schedule_error_ms=_optional(testing, "max_schedule_error_ms", float),
+            retry_attempts=_value(retry, "attempts", int, 1),  # 1 by default: never change failure semantics
+            retry_backoff_s=_value(retry, "backoff_seconds", float, 0.005),
             simulated_failure_rate=_value(simulation, "failure_rate", float, 0.0),
             simulation_seed=_optional(simulation, "seed", int),
             reference_current_a=_optional(analysis, "reference_current_a", float),

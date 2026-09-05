@@ -27,6 +27,8 @@ def test_shipped_config_matches_the_emulators() -> None:
     assert config.ammeter("circutor").command == "MEASURE_CIRCUTOR -get_measurement -current"
     assert config.sample_count == 50 and config.frequency_hz == 10 and config.duration_s is None
     assert config.max_failure_rate == 0.05 and config.max_schedule_error_ms == 10
+    assert config.retry_attempts == 2 and config.retry_backoff_s == 0.005
+    assert config.retry_budget_s == pytest.approx(0.005)  # comfortably inside the shipped 100 ms interval
 
 
 def test_shipped_config_commands_match_the_emulator_definitions() -> None:
@@ -46,6 +48,7 @@ def test_minimal_config_uses_defaults() -> None:
     assert config.max_schedule_error_ms is None
     assert (config.max_failure_rate, config.simulated_failure_rate, config.plots_enabled) == (0.0, 0.0, True)
     assert config.results_dir == Path("results")
+    assert config.retry_attempts == 1 and config.retry_budget_s == 0.0  # retrying is off unless asked for
 
 
 def test_unknown_ammeter_lists_the_known_ones() -> None:
@@ -76,6 +79,12 @@ def test_unknown_ammeter_lists_the_known_ones() -> None:
         (
             with_sections(testing={"sampling": {}, "max_schedule_error_ms": 0}),
             "'max_schedule_error_ms' must be positive",
+        ),
+        (with_sections(testing={"sampling": {}, "retry": {"attempts": 0}}), "'attempts' must be at least 1, got 0"),
+        (with_sections(testing={"sampling": {}, "retry": {"attempts": "two"}}), "'attempts' must be int"),
+        (
+            with_sections(testing={"sampling": {}, "retry": {"backoff_seconds": -1}}),
+            "'backoff_seconds' must not be negative",
         ),
     ],
 )

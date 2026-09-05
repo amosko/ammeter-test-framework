@@ -3,7 +3,7 @@ import dataclasses
 import pytest
 
 from Ammeters.client import AmmeterConnectionError, AmmeterError
-from src.testing.ammeter import FaultInjector, Measure
+from src.testing.ammeter import FaultInjector, Measure, Retrying
 from src.testing.framework import AmmeterTestFramework
 from src.utils.config import AmmeterSpec, Config, ConfigError
 from tests.helpers import free_port
@@ -61,6 +61,41 @@ def test_ammeter_reference_overrides_the_global_one(config: Config) -> None:
 def test_run_metadata_records_the_criteria(config: Config) -> None:
     metadata = AmmeterTestFramework(config).run_test("greenlee").metadata
     assert metadata["max_failure_rate"] == 0.05 and metadata["max_schedule_error_ms"] == 10
+
+
+def test_retrying_wraps_the_transport_only_when_it_is_enabled(config: Config) -> None:
+    greenlee = config.ammeter("greenlee")
+    retried = dataclasses.replace(config, retry_attempts=3, retry_backoff_s=0.0)
+    assert isinstance(AmmeterTestFramework(retried).make_measure(greenlee), Retrying)
+
+    off = dataclasses.replace(config, retry_attempts=1)
+    assert not isinstance(AmmeterTestFramework(off).make_measure(greenlee), Retrying)
+
+
+def test_run_metadata_records_the_retry_settings(config: Config) -> None:
+    """A run with retries enabled has different failure semantics; an archived result that does not say
+    which it was cannot be compared honestly against one that does."""
+    config = dataclasses.replace(config, retry_attempts=3, retry_backoff_s=0.0)
+    metadata = AmmeterTestFramework(config).run_test("greenlee").metadata
+    assert metadata["retry_attempts"] == 3 and metadata["retry_backoff_s"] == 0.0
+
+
+def test_an_oversized_retry_budget_is_rejected_before_any_device_is_touched(config: Config) -> None:
+    """Backoff sleeps inside a sample's slot, so a budget wider than the interval would push every later
+    sample late and fail max_schedule_error_ms for a reason that has nothing to do with the device."""
+    config = dataclasses.replace(config, retry_attempts=4, retry_backoff_s=1.0)
+    with pytest.raises(ConfigError, match="retry budget"):
+        AmmeterTestFramework(config).run_test("greenlee")
+    assert not config.results_dir.exists()
+
+
+def test_simulated_faults_are_not_retried_away(config: Config) -> None:
+    """FaultInjector stays outside the retry, so the simulated rate in the metadata means what it says."""
+    config = dataclasses.replace(
+        config, simulated_failure_rate=1.0, simulation_seed=7, retry_attempts=3, retry_backoff_s=0.0
+    )
+    result = AmmeterTestFramework(config).run_test("greenlee")
+    assert result.failure_rate == 1.0 and result.metadata["simulated_failure_rate"] == 1.0
 
 
 def test_make_measure_hook_swaps_the_transport(config: Config) -> None:

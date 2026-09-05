@@ -59,6 +59,41 @@ measure. The verdict fails a run when more than `max_failure_rate` of the sample
 outside the ammeter's expected range or a sample was taken too late, and the CLI exit code reflects it
 (0 pass, 1 fail, 2 usage).
 
+**Retries, and what must not be retried.** A single dropped TCP handshake would otherwise become a failed
+sample, count against `max_failure_rate` and fail an otherwise healthy run — a test framework reporting a
+transient blip as a device fault is producing false failures, the worst thing it can do. `Retrying` wraps
+any `Measure` and retries `AmmeterConnectionError` and `AmmeterTimeoutError` with linear backoff
+(attempt *n* waits *n* × backoff; exponential buys nothing inside an interval measured in tens of
+milliseconds). `AmmeterProtocolError` is deliberately *not* retried: an unanswered or non-numeric reply
+means a wrong command or a wrong port, which is deterministic and identical on every attempt, so retrying
+burns the sampling budget and delays the moment the operator learns their config is wrong. Having three
+typed transport errors rather than one generic client error is what makes that distinction expressible.
+
+The layering is retry *inside* the transport, fault injection *outside* it: `make_measure` wraps
+`Ammeter.measure` in `Retrying`, and `run_test` wraps the result in `FaultInjector`. `FaultInjector`
+raises bare `AmmeterError`, which is not in `TRANSIENT_ERRORS`, so a simulated fault would not be retried
+away even if the layers were reversed — but keeping the injector outermost makes the simulated failure
+rate in the archived metadata mean exactly what it says, rather than "the rate before retries absorbed
+some of it". Both retry settings go into the metadata too, because a run with retries enabled has
+different failure semantics from one without and the two cannot otherwise be compared honestly.
+
+Backoff sleeps *inside* a sample's slot, so `sampling_plan` rejects a retry budget that does not fit in
+the sampling interval, before any device is touched: otherwise one failing sample pushes every later
+sample late, the schedule collapses and `max_schedule_error_ms` fails the run for a reason that has
+nothing to do with the device. The budget counts only the deliberate sleeping, not the socket timeout —
+worst case per sample is `attempts × timeout + backoffs`, which at the shipped `timeout_seconds: 2.0`
+would be 4 s and would reject every sane config; a device that burns its timeout on every attempt is
+dead, and the connectivity pre-check already fails fast on that. A device that dies *mid-run* still
+overruns its schedule, and that is correct: the run is reported FAIL with a reason, which is the
+framework doing its job, so there is no cap.
+
+The shipped `backoff_seconds` is 5 ms, not the 50 ms that retry conventions borrowed from remote services
+would suggest. The failure being recovered from is a dropped handshake on localhost, where the whole
+request round trip measures about 1.7 ms; 50 ms would consume half of the 100 ms shipped interval and cap
+sampling just under 20 Hz, which would reject this repository's own documented
+`--count 100 --frequency 20` example. At 5 ms the budget is 5% of the shipped slot and the check only
+bites above 200 Hz.
+
 **Statistics from the standard library.** Mean, median, sample standard deviation (n-1), min, max and
 coefficient of variation come from `statistics`; numpy, scipy and pandas were dropped because they
 added nothing for a few dozen numbers. matplotlib is imported lazily and is optional.

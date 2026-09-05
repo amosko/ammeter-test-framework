@@ -79,7 +79,7 @@ Most consistent (lowest CV): circutor at 49.1%
 
 `run` options: `--count N`, `--duration SECONDS`, `--frequency HZ` (any two), `--label TEXT`,
 `--reference AMPERES` (known reference current, enables accuracy metrics), `--simulate-errors RATE` with
-`--seed N` for a reproducible failure pattern, `--no-plot`, `--start-emulators`.
+`--seed N` for a reproducible failure pattern, `--retry-attempts N`, `--no-plot`, `--start-emulators`.
 Options shared by every command go before the command: `--config PATH`, `--results-dir PATH`, `--verbose`.
 
 Exit code: 0 when every run passed, 1 when a run failed or an ammeter was unreachable, 2 for usage
@@ -106,6 +106,9 @@ testing:
   timeout_seconds: 2.0              # per connect and per reply
   max_failure_rate: 0.05            # a run fails if more samples than this fail
   max_schedule_error_ms: 10         # or if a sample is taken this late; null disables the check
+  retry:
+    attempts: 2                     # attempts per sample; 1 disables retrying
+    backoff_seconds: 0.005          # linear: attempt n waits n * backoff
   error_simulation:
     failure_rate: 0.0               # randomly fail this fraction of samples
     seed: null
@@ -125,6 +128,12 @@ one sample every 100 ms. Count alone means "as fast as possible".
 A run passes when at most `max_failure_rate` of its samples failed, every reading is inside the
 ammeter's expected range and no sample was taken later than `max_schedule_error_ms` after its schedule.
 
+Transient transport failures (a refused connection, a timeout) are retried, so a single dropped handshake
+does not count as a device fault. Protocol errors are never retried: an unanswered or non-numeric reply
+means a wrong command or port, which is identical on every attempt. The backoff sleeps inside the
+sample's slot, so a retry budget that does not fit in the sampling interval is rejected up front rather
+than silently wrecking the schedule.
+
 Adding an ammeter is a config entry: name, host, port, command and optionally its expected range and
 reference current.
 
@@ -135,9 +144,9 @@ start time and the ammeter name plus a random suffix, so ids are unique and sort
 `20260904_191148_entes_b5f5e2ef`.
 
 The JSON holds the ammeter spec, the sampling plan, metadata (label, Python version, platform, the
-criteria and the simulated failure rate), every sample (scheduled and actual time, latency, value or
-error), the statistics (mean, median, sample standard deviation, min, max, coefficient of variation),
-timing metrics, optional accuracy metrics and the verdict with its reasons.
+criteria, the retry settings and the simulated failure rate), every sample (scheduled and actual time,
+latency, value or error), the statistics (mean, median, sample standard deviation, min, max,
+coefficient of variation), timing metrics, optional accuracy metrics and the verdict with its reasons.
 
 `compare` ranks runs by coefficient of variation (standard deviation divided by mean), the unit-free
 precision measure that can be compared across ammeters with very different current ranges. With a
