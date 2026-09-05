@@ -13,3 +13,6 @@ venv/
 
 # Runtime output
 results/logs/
+
+# The implementation brief, kept locally and out of the submission
+IMPROVEMENTS.md

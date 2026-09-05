@@ -7,7 +7,8 @@ on its own:
 
 ```
 Ammeters/client.py       transport: one TCP request, typed errors (connection / timeout / protocol)
-src/testing/ammeter.py   unified API: Ammeter.measure() -> amperes, FaultInjector for error simulation
+src/testing/ammeter.py   unified API: Ammeter.measure() -> amperes, Retrying for transient transport
+                         failures, FaultInjector for error simulation
 src/testing/sampling.py  SamplingPlan + collect_samples(): timed collection, failures recorded per sample
 src/testing/analysis.py  Statistics, TimingStats, AccuracyStats, evaluate() -> Verdict
 src/testing/results.py   RunResult (everything about one run) + ResultsArchive (JSON per run)
@@ -74,7 +75,7 @@ instantiate them. The config is the datasheet: when the README and the emulator 
 command, the config was corrected to what the device actually accepts, the emulator was not changed.
 
 **Config driven, CLI overridable.** `config/config.yaml` holds the ammeters, sampling, pass criteria,
-error simulation and archive location. `Config` is a frozen dataclass validated on construction, so a
+retries, error simulation and archive location. `Config` is a frozen dataclass validated on construction, so a
 bad value is rejected with a clear message whether it comes from YAML or from a command line override
 (`dataclasses.replace`). Bool/number confusion (`port: true`, `enabled: "false"`) is rejected
 explicitly, since YAML happily turns `true` into `1`.

@@ -38,7 +38,7 @@ Run the framework in a second terminal:
 python run_tests.py run                          # sample every configured ammeter
 python run_tests.py run greenlee --count 100 --frequency 20
 python run_tests.py list                         # archived runs
-python run_tests.py show 20260904_191148_entes_b5f5e2ef
+python run_tests.py show 20260905_222841_entes_fcdbbc8c
 python run_tests.py compare --latest             # latest run of every ammeter, side by side
 ```
 
@@ -53,12 +53,12 @@ reports print together once every ammeter has finished.
 Progress goes to stderr as `[INFO]` lines; the report goes to stdout:
 
 ```
-Run 20260904_191148_entes_b5f5e2ef  [PASS]
+Run 20260905_222841_entes_fcdbbc8c  [PASS]
   ammeter   entes @ localhost:5001  label: baseline
-  samples   50/50 ok, 10 Hz, 4.9 s (scheduled 4.9 s)
-  timing    max schedule error 0.01 ms, latency mean 1.68 ms / max 2.34 ms
-  current   mean 73.7 A, median 74.07 A, stdev 39.78 A, min 8.064 A, max 165.3 A, CV 53.97%
-  plot      results/20260904_191148_entes_b5f5e2ef.png
+  samples   50/50 ok, 10 Hz, 4.91 s (scheduled 4.9 s)
+  timing    max schedule error 0.22 ms, latency mean 3.33 ms / max 8.99 ms
+  current   mean 68.66 A, median 54.88 A, stdev 42.81 A, min 5.896 A, max 168 A, CV 62.36%
+  plot      results/20260905_222841_entes_fcdbbc8c.png
 ```
 
 `compare` after a full run:
@@ -67,10 +67,10 @@ Run 20260904_191148_entes_b5f5e2ef  [PASS]
 Comparison of 3 runs
 ammeter   run_id                             mean [A]  median [A]  stdev [A]  CV %   failed/total  latency [ms]
 --------  ---------------------------------  --------  ----------  ---------  -----  ------------  ------------
-circutor  20260904_191153_circutor_06d39bb0  0.03054   0.02926     0.01499    49.1   0/50          1.74
-entes     20260904_191148_entes_b5f5e2ef     73.7      74.07       39.78      53.97  0/50          1.68
-greenlee  20260904_191142_greenlee_20796978  0.1649    0.1144      0.153      92.8   0/50          1.67
-Most consistent (lowest CV): circutor at 49.1%
+circutor  20260905_222841_circutor_a9542090  0.03092   0.0298      0.01635    52.86  0/50          3.31
+entes     20260905_222841_entes_fcdbbc8c     68.66     54.88       42.81      62.36  0/50          3.33
+greenlee  20260905_222841_greenlee_242a2790  0.2768    0.09735     0.4818     174.1  0/50          3.11
+Most consistent (lowest CV): circutor at 52.86%
 ```
 
 ## Commands
@@ -146,7 +146,7 @@ reference current.
 
 Every run is archived as `results/<run_id>.json` with a matching `<run_id>.png` plot. The run id embeds the
 start time and the ammeter name plus a random suffix, so ids are unique and sort chronologically:
-`20260904_191148_entes_b5f5e2ef`.
+`20260905_222841_entes_fcdbbc8c`.
 
 The JSON holds the ammeter spec, the sampling plan, metadata (label, Python version, platform, the
 criteria, the retry settings and the simulated failure rate), every sample (scheduled and actual time,
@@ -202,7 +202,7 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 
 ```sh
 pip install -r requirements-dev.txt
-python -m pytest            # 90 tests, about 2 seconds; starts emulators on free ports by itself
+python -m pytest            # 127 tests, about 2 seconds; starts emulators on free ports by itself
 python -m ruff check .
 python -m mypy main.py run_tests.py Ammeters src tests examples
 ```
