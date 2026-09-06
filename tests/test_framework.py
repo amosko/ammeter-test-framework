@@ -118,8 +118,9 @@ def test_ammeter_reference_overrides_the_global_one(config: Config) -> None:
 
 
 def test_run_metadata_records_the_criteria(config: Config) -> None:
+    config = dataclasses.replace(config, max_schedule_error_ms=25)  # explicit: the fixture disables it
     metadata = AmmeterTestFramework(config).run_test("greenlee").metadata
-    assert metadata["max_failure_rate"] == 0.05 and metadata["max_schedule_error_ms"] == 10
+    assert metadata["max_failure_rate"] == 0.05 and metadata["max_schedule_error_ms"] == 25
 
 
 def test_retrying_wraps_the_transport_only_when_it_is_enabled(config: Config) -> None:

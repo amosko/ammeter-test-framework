@@ -36,6 +36,10 @@ def config(emulator_ports: dict[str, int], tmp_path: Path) -> Config:
         duration_s=None,
         frequency_hz=100,
         retry_attempts=1,  # the 10 ms interval must not depend on the shipped retry budget
+        # These tests verify the framework, not whether the host can hold a 10 ms schedule: a shared CI
+        # runner stalls for tens of ms. The criterion itself is checked deterministically in
+        # test_analysis.py, and config/config.yaml still ships 10 ms.
+        max_schedule_error_ms=None,
         results_dir=tmp_path / "results",
     )
 
