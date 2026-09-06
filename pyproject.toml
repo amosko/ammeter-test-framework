@@ -18,7 +18,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [[tool.mypy.overrides]]
-# matplotlib is optional and imported lazily; it drags in numpy, whose stubs use syntax newer than the
-# 3.9 target this project checks against. Neither is part of this codebase's own type surface.
-module = ["matplotlib.*", "numpy.*"]
+# Third-party sources are not this codebase's type surface, and their own syntax targets newer Pythons
+# than the 3.9 this project checks against: numpy's stubs use PEP 695 type statements and pytest uses
+# match. Without this, running mypy on a modern interpreter fails inside a dependency.
+module = ["matplotlib.*", "numpy.*", "pytest.*", "_pytest.*"]
 follow_imports = "skip"
