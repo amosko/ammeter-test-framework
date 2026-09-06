@@ -1,18 +1,21 @@
 # Ammeter test framework configuration. Command line flags override these values.
 
+# The emulators create an AF_INET socket, so they serve 127.0.0.1 only. Naming the address rather than
+# "localhost" matters on Windows, where localhost resolves to ::1 first and the IPv6 attempt has to
+# time out before the client falls back to IPv4 -- two seconds per measurement.
 ammeters:
   greenlee:
-    host: localhost
+    host: 127.0.0.1
     port: 5000
     command: "MEASURE_GREENLEE -get_measurement"
     expected_range_a: [0.01, 100]      # 1-10 V over 0.1-100 ohm
   entes:
-    host: localhost
+    host: 127.0.0.1
     port: 5001
     command: "MEASURE_ENTES -get_data"
     expected_range_a: [5, 200]         # 0.01-0.1 T times a 500-2000 calibration factor
   circutor:
-    host: localhost
+    host: 127.0.0.1
     port: 5002
     command: "MEASURE_CIRCUTOR -get_measurement -current"   # the emulator requires "-current"; the original README omitted it
     expected_range_a: [0.001, 0.1]     # 10 samples of 0.1-1 V over 1-10 ms steps

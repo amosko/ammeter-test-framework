@@ -19,7 +19,7 @@ def emulator_ports() -> dict[str, int]:
     for name, emulator_class in EMULATORS.items():
         port = free_port()
         threading.Thread(target=emulator_class(port).start_server, daemon=True).start()
-        wait_for_ammeter("localhost", port)
+        wait_for_ammeter("127.0.0.1", port)
         ports[name] = port
     return ports
 

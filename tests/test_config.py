@@ -43,7 +43,7 @@ def test_shipped_config_commands_match_the_emulator_definitions() -> None:
 def test_minimal_config_uses_defaults() -> None:
     config = Config.from_dict(MINIMAL)
     spec = config.ammeter("greenlee")
-    assert (spec.host, spec.timeout_s, spec.expected_min_a, spec.reference_current_a) == ("localhost", 2.0, None, None)
+    assert (spec.host, spec.timeout_s, spec.expected_min_a, spec.reference_current_a) == ("127.0.0.1", 2.0, None, None)
     assert config.max_schedule_error_ms is None
     assert (config.max_failure_rate, config.simulated_failure_rate, config.plots_enabled) == (0.0, 0.0, True)
     assert config.results_dir == Path("results")

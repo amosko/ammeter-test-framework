@@ -182,7 +182,7 @@ def _parse_ammeter(name: str, entry: Any, timeout_s: float) -> AmmeterSpec:
 
     return AmmeterSpec(
         name=name,
-        host=_value(entry, "host", str, "localhost"),
+        host=_value(entry, "host", str, "127.0.0.1"),  # not "localhost": the emulators are IPv4 only
         port=port,
         command=command,
         timeout_s=timeout_s,
