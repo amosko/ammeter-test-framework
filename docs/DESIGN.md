@@ -175,6 +175,8 @@ are pinned the same way, against 200 readings from each emulator.
 | `Ammeters/base_ammeter.py` | Restarting failed with "Address already in use" while old connections were in TIME_WAIT (the reason for the "increase sleep time" comment) | `SO_REUSEADDR` on POSIX; on Windows the flag would let two servers bind one port. Three lines changed |
 | `Ammeters/base_ammeter.py` | `random.seed(time.time())` in `__init__` reseeded the *global* RNG all three emulators draw from, so devices constructed in the same millisecond could share a stream | Removed; CPython seeds `random` from `os.urandom` at import. An injectable seed would still write to the global module; reproducibility is available via `make_measure` or `FaultInjector(seed=...)` |
 | `Ammeters/Greenlee_Ammeter.py` | The reading was printed with a Greek capital omega for ohms, which the default Windows console encoding (cp1252) cannot encode, so `measure_current` raised `UnicodeEncodeError` after matching the command but before replying. Every request on Windows hung until the client's timeout; found by CI, not by reading | Prints `ohm`. One string, no change to the measurement |
+| `config/config.yaml` | Ammeters were addressed as `localhost`, but the emulators bind an `AF_INET` socket and serve `127.0.0.1` only. On Windows `localhost` resolves to `::1` first, so every request burned its full two-second timeout on IPv6 before falling back; a five-sample run took 10 s | The config names the address the device actually serves, as it already does for the CIRCUTOR command |
+| `Ammeters/client.py` | Connecting and reading shared one `try`, so a connect that timed out became `AmmeterTimeoutError`. POSIX refuses a dead port and Windows drops it, so the same fault had a different type per platform, and the CLI's "start the emulators" hint only fires on a connection error | Connect failures are connection errors whether refused or timed out; only a connected but silent device is a timeout. Matches what the docstring already claimed |
 | `Ammeters/client.py` | No timeout, so a silent device hangs forever; printed instead of returning the value; a single `recv` could return a truncated number | Timeout, typed errors, reads until the emulator closes, returns the float |
 | `README.md` | CIRCUTOR command missing `-current`; referenced `AmmeterTester.py` and `run_test.py`, which do not exist | Rewritten |
 | `config/config.yaml` | Every value null or commented out | Filled in, plus criteria and error simulation |
@@ -197,9 +199,16 @@ Runtime: PyYAML, matplotlib (optional). Development: pytest, mypy, ruff, types-P
 Pure standard library networking and timing, `pathlib` paths, `matplotlib` in headless (`Agg`) mode. Run
 ids contain no character Windows forbids in a filename, and the archive is moved into place with
 `os.replace`, which is atomic on both. The schedule error reported per run shows the real effect on any
-host. Every commit runs the suite, ruff and mypy on ubuntu, macOS and Windows, plus an end-to-end job
-that starts real emulators and drives the CLI twice on each (`.github/workflows/ci.yml`). Two things
-still differ by design:
+host. Every commit runs the suite, ruff and mypy on ubuntu, macOS and Windows against Python 3.9 and
+3.13, plus an end-to-end job that starts real emulators and drives the CLI twice on each
+(`.github/workflows/ci.yml`).
+
+That matrix was added because "ensure cross-platform compatibility" is a requirement and nothing here had
+ever run on Windows. It found three real defects that reading the code had not: the omega in the Greenlee
+print, the IPv6 detour below, and a connect timeout being reported as a reply timeout. None of them were
+in the sockets-and-paths places one thinks to look.
+
+Two things still differ by design:
 
 - `SO_REUSEADDR` is set only on POSIX, because on Windows the flag lets two servers bind one port. The
   cost is that restarting `main.py` while old connections sit in TIME_WAIT binds cleanly on POSIX but can
@@ -211,6 +220,15 @@ still differ by design:
   worst case, to 1.5 ms — far short of the bound and still inside the criterion — but that isolates the
   GIL contention without reproducing Windows' timer coarseness. Since 3.11 the window is 2 ms on Windows
   too, so this applies only to Python 3.9 and 3.10 there.
+
+Addressing: the emulators create an `AF_INET` socket, so they serve `127.0.0.1` only, and the config
+names that address rather than `localhost`. On Windows `localhost` resolves to `::1` first, so every
+request spent its whole two-second timeout failing over IPv6 before falling back — a 5-sample run took
+10 s instead of 40 ms. Naming what the device actually serves is the same correction the CIRCUTOR command
+got.
+
+Timer coarseness before Python 3.11 also runs in both directions: `time.sleep(0.01)` on Windows 3.9
+returned after 8.8 ms, so tests that need a known duration spin rather than sleep.
 
 The 10 ms timing criterion is a property of the host as much as the code: a shared CI runner stalls for
 tens of milliseconds, and a single-ammeter run on a macOS runner measured 51 ms. That is the framework

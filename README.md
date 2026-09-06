@@ -1,5 +1,7 @@
 # Ammeter Test Framework
 
+[![CI](https://github.com/amosko/ammeter-test-framework/actions/workflows/ci.yml/badge.svg?branch=feature/ammeter-test-framework)](https://github.com/amosko/ammeter-test-framework/actions/workflows/ci.yml)
+
 Emulators for three ammeters (Greenlee, ENTES, CIRCUTOR) and a test framework that samples them on a
 precise schedule, analyses the readings, judges each run against pass/fail criteria, archives the results
 and compares ammeters against each other.
@@ -32,7 +34,8 @@ python3 -m pip install -r requirements.txt
 | matplotlib | optional, the PNG plots (skipped if absent) |
 
 The commands below use `python3`, which is what the interpreter is called on macOS and most Linux
-systems. On Windows it is usually `python`.
+systems. On Windows it is usually `python`. Every commit is tested on Linux, macOS and Windows against
+Python 3.9 and 3.13; see `.github/workflows/ci.yml`.
 
 ## Quick start
 
@@ -49,7 +52,7 @@ Run the framework in a second terminal:
 python3 run_tests.py run                          # sample every configured ammeter
 python3 run_tests.py run greenlee --count 100 --frequency 20
 python3 run_tests.py list                         # archived runs
-python3 run_tests.py show 20260905_222841_entes_fcdbbc8c
+python3 run_tests.py show 20260906_164010_entes_41918e70
 python3 run_tests.py compare --latest             # latest run of every ammeter, side by side
 ```
 
@@ -63,12 +66,12 @@ Reports print together once every ammeter has finished.
 Progress goes to stderr as `[INFO]` lines; the report goes to stdout:
 
 ```
-Run 20260905_222841_entes_fcdbbc8c  [PASS]
-  ammeter   entes @ localhost:5001  label: baseline
-  samples   50/50 ok, 10 Hz, 4.91 s (scheduled 4.9 s)
-  timing    max schedule error 0.22 ms, latency mean 3.33 ms / max 8.99 ms
-  current   mean 68.66 A, median 54.88 A, stdev 42.81 A, min 5.896 A, max 168 A, CV 62.36%
-  plot      results/20260905_222841_entes_fcdbbc8c.png
+Run 20260906_164010_entes_41918e70  [PASS]
+  ammeter   entes @ 127.0.0.1:5001  label: baseline
+  samples   50/50 ok, 10 Hz, 4.9 s (scheduled 4.9 s)
+  timing    max schedule error 0.52 ms, latency mean 1.61 ms / max 2.22 ms
+  current   mean 76.52 A, median 73.06 A, stdev 40.12 A, min 12.82 A, max 178.2 A, CV 52.44%
+  plot      results/20260906_164010_entes_41918e70.png
 ```
 
 `compare` after a full run:
@@ -77,10 +80,10 @@ Run 20260905_222841_entes_fcdbbc8c  [PASS]
 Comparison of 3 runs
 ammeter   run_id                             mean [A]  median [A]  stdev [A]  CV %   failed/total  latency [ms]
 --------  ---------------------------------  --------  ----------  ---------  -----  ------------  ------------
-circutor  20260905_222841_circutor_a9542090  0.03092   0.0298      0.01635    52.86  0/50          3.31
-entes     20260905_222841_entes_fcdbbc8c     68.66     54.88       42.81      62.36  0/50          3.33
-greenlee  20260905_222841_greenlee_242a2790  0.2768    0.09735     0.4818     174.1  0/50          3.11
-Most consistent (lowest CV): circutor at 52.86%
+circutor  20260906_164010_circutor_aa9fba71  0.02907   0.02703     0.01357    46.69  0/50          1.45
+entes     20260906_164010_entes_41918e70     76.52     73.06       40.12      52.44  0/50          1.61
+greenlee  20260906_164010_greenlee_d74b38ba  0.4325    0.1066      1.266      292.6  0/50          2.04
+Most consistent (lowest CV): circutor at 46.69%
 ```
 
 ## Commands
@@ -107,7 +110,7 @@ Everything lives in `config/config.yaml`; command line flags override it for one
 ```yaml
 ammeters:
   greenlee:
-    host: localhost
+    host: 127.0.0.1
     port: 5000
     command: "MEASURE_GREENLEE -get_measurement"
     expected_range_a: [0.01, 100]   # readings outside this range fail the run
@@ -154,7 +157,7 @@ reference current.
 
 Every run is archived as `results/<run_id>.json` with a matching `<run_id>.png` plot. The run id embeds the
 start time and the ammeter name plus a random suffix, so ids are unique and sort chronologically:
-`20260905_222841_entes_fcdbbc8c`.
+`20260906_164010_entes_41918e70`.
 
 The JSON holds the ammeter spec, the sampling plan, metadata (label, Python version, platform, the
 criteria, the retry settings and the simulated failure rate), every sample (scheduled and actual time,
