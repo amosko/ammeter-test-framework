@@ -174,6 +174,7 @@ are pinned the same way, against 200 readings from each emulator.
 | `main.py` | Startup used a fixed 5 s sleep; a second instance failed with a thread traceback | Waits until each server accepts connections; refuses a port that is already in use; keeps serving until Ctrl+C |
 | `Ammeters/base_ammeter.py` | Restarting failed with "Address already in use" while old connections were in TIME_WAIT (the reason for the "increase sleep time" comment) | `SO_REUSEADDR` on POSIX; on Windows the flag would let two servers bind one port. Three lines changed |
 | `Ammeters/base_ammeter.py` | `random.seed(time.time())` in `__init__` reseeded the *global* RNG all three emulators draw from, so devices constructed in the same millisecond could share a stream | Removed; CPython seeds `random` from `os.urandom` at import. An injectable seed would still write to the global module; reproducibility is available via `make_measure` or `FaultInjector(seed=...)` |
+| `Ammeters/Greenlee_Ammeter.py` | The reading was printed with a Greek capital omega for ohms, which the default Windows console encoding (cp1252) cannot encode, so `measure_current` raised `UnicodeEncodeError` after matching the command but before replying. Every request on Windows hung until the client's timeout; found by CI, not by reading | Prints `ohm`. One string, no change to the measurement |
 | `Ammeters/client.py` | No timeout, so a silent device hangs forever; printed instead of returning the value; a single `recv` could return a truncated number | Timeout, typed errors, reads until the emulator closes, returns the float |
 | `README.md` | CIRCUTOR command missing `-current`; referenced `AmmeterTester.py` and `run_test.py`, which do not exist | Rewritten |
 | `config/config.yaml` | Every value null or commented out | Filled in, plus criteria and error simulation |
@@ -196,7 +197,9 @@ Runtime: PyYAML, matplotlib (optional). Development: pytest, mypy, ruff, types-P
 Pure standard library networking and timing, `pathlib` paths, `matplotlib` in headless (`Agg`) mode. Run
 ids contain no character Windows forbids in a filename, and the archive is moved into place with
 `os.replace`, which is atomic on both. The schedule error reported per run shows the real effect on any
-host. Two things genuinely differ, both deliberate, neither exercised on Windows here:
+host. Every commit runs the suite, ruff and mypy on ubuntu, macOS and Windows, plus an end-to-end job
+that starts real emulators and drives the CLI twice on each (`.github/workflows/ci.yml`). Two things
+still differ by design:
 
 - `SO_REUSEADDR` is set only on POSIX, because on Windows the flag lets two servers bind one port. The
   cost is that restarting `main.py` while old connections sit in TIME_WAIT binds cleanly on POSIX but can
@@ -206,8 +209,13 @@ host. Two things genuinely differ, both deliberate, neither exercised on Windows
   ammeters rather than 4, and above 50 Hz the window exceeds the sampling interval, so every worker spins
   through its whole slot instead of sleeping. Forcing the 20 ms window on macOS only doubled the measured
   worst case, to 1.5 ms — far short of the bound and still inside the criterion — but that isolates the
-  GIL contention without reproducing Windows' timer coarseness. On Windows, sample one ammeter at a time
-  above roughly 50 Hz until the timing table has been reproduced there.
+  GIL contention without reproducing Windows' timer coarseness. Since 3.11 the window is 2 ms on Windows
+  too, so this applies only to Python 3.9 and 3.10 there.
+
+The 10 ms timing criterion is a property of the host as much as the code: a shared CI runner stalls for
+tens of milliseconds, and a single-ammeter run on a macOS runner measured 51 ms. That is the framework
+reporting the truth about its host, so the criterion is unchanged and the CI jobs that are not about
+timing disable it explicitly.
 
 ## Extending
 
