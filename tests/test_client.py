@@ -47,8 +47,9 @@ def test_wrong_command_is_a_protocol_error(greenlee: AmmeterSpec) -> None:
 
 
 def test_unreachable_port_is_a_connection_error() -> None:
-    with pytest.raises(AmmeterConnectionError, match="failed"):
-        read_current("127.0.0.1", free_port(), "x")
+    """POSIX refuses a dead port and Windows drops it, so the message differs; the type must not."""
+    with pytest.raises(AmmeterConnectionError, match=r"connection to 127\.0\.0\.1:\d+ (failed|timed out)"):
+        read_current("127.0.0.1", free_port(), "x", timeout_s=1.0)
 
 
 def test_silent_server_times_out() -> None:
