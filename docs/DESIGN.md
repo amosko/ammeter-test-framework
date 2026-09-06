@@ -76,7 +76,9 @@ explicitly, since YAML happily turns `true` into `1`.
 
 **Sampling: any two of count, duration and frequency.** 50 samples at 10 Hz is a 5 s test with one
 sample every 100 ms; sample *i* is scheduled at `i * interval`, so the last one is at 4.9 s. Count alone
-means unpaced sampling. Giving three inconsistent values is an error rather than a silent choice.
+means unpaced sampling. Giving three inconsistent values is an error rather than a silent choice. On the
+command line, two flags define the plan and the third is derived: otherwise the config would supply a
+third value and every pair but the config's own would be rejected as an inconsistent triple.
 
 **Precise timing.** Each sample has an absolute deadline (`start + i * interval`), so sleep overshoot
 cannot accumulate. The wait sleeps in halving steps and spins for the last 2 ms, because operating

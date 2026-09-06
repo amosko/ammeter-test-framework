@@ -10,7 +10,7 @@ import time
 from collections.abc import Iterator, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from Ammeters.client import AmmeterConnectionError, AmmeterError, is_listening
 from src.testing.framework import AmmeterTestFramework
@@ -91,9 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def cmd_run(args: argparse.Namespace, config: Config) -> int:
     overrides = {
-        "sample_count": args.count,
-        "duration_s": args.duration,
-        "frequency_hz": args.frequency,
         "reference_current_a": args.reference,
         "simulated_failure_rate": args.simulate_errors,
         "retry_attempts": args.retry_attempts,
@@ -101,6 +98,7 @@ def cmd_run(args: argparse.Namespace, config: Config) -> int:
         "plots_enabled": False if args.no_plot else None,
     }
     config = dataclasses.replace(config, **{k: v for k, v in overrides.items() if v is not None})
+    config = dataclasses.replace(config, **_sampling_overrides(args))
     framework = AmmeterTestFramework(config)
     try:
         framework.sampling_plan()  # validate the sampling settings before touching any device
@@ -142,6 +140,17 @@ def cmd_compare(args: argparse.Namespace, config: Config) -> int:
         raise ValueError("nothing to compare: give run ids or --latest")
     _print_comparison(results, framework, config.plots_enabled and not args.no_plot)
     return 0
+
+
+def _sampling_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """Two flags define the plan on their own, so the third comes from the flags rather than the config.
+
+    Without this the config's own value supplies a third, and any pair but the config's own becomes an
+    inconsistent triple -- so `--duration 1 --frequency 20` would be rejected against a count nobody asked for.
+    """
+    given: dict[str, Any] = {"sample_count": args.count, "duration_s": args.duration, "frequency_hz": args.frequency}
+    supplied = {name: value for name, value in given.items() if value is not None}
+    return {name: supplied.get(name) for name in given} if len(supplied) >= 2 else supplied
 
 
 def _sampling_hint(args: argparse.Namespace) -> str:

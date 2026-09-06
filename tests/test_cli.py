@@ -6,6 +6,7 @@ import pytest
 
 from src.testing.cli import main
 from src.testing.results import ResultsArchive, RunResult
+from src.testing.sampling import SamplingPlan
 from tests.helpers import free_port
 
 CONFIG_TEMPLATE = """
@@ -77,6 +78,29 @@ def test_plotting_stays_on_the_main_thread(cli: Callable[..., int], monkeypatch:
     monkeypatch.setattr("src.testing.cli.plot_comparison", lambda results, path: path)
     assert cli("run") == 0
     assert callers == [threading.main_thread().name] * 2  # one per ammeter, none from a worker
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--count", "20", "--frequency", "20"],
+        ["--count", "20", "--duration", "1"],
+        ["--duration", "1", "--frequency", "20"],
+    ],
+)
+def test_any_two_sampling_flags_define_the_plan(
+    flags: list[str], cli: Callable[..., int], tmp_path: Path
+) -> None:
+    """The config supplies the third value otherwise, so every pair but its own became an inconsistent triple."""
+    assert cli("run", "greenlee", *flags, "--no-plot") == 0
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+    assert result.plan == SamplingPlan(count=20, interval_s=0.05)
+
+
+def test_one_sampling_flag_still_combines_with_the_config(cli: Callable[..., int], tmp_path: Path) -> None:
+    assert cli("run", "greenlee", "--count", "6", "--no-plot") == 0
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+    assert result.plan == SamplingPlan(count=6, interval_s=0.01)  # 100 Hz from the config
 
 
 def test_failed_verdict_sets_exit_code(cli: Callable[..., int], capsys: pytest.CaptureFixture[str]) -> None:

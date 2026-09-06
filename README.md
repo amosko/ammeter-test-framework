@@ -141,7 +141,9 @@ result_management:
 ```
 
 Sampling is defined by any two of count, duration and frequency: 50 samples at 10 Hz is a 5 s test with
-one sample every 100 ms. Count alone means "as fast as possible".
+one sample every 100 ms. Count alone means "as fast as possible". Two of `--count`, `--duration` and
+`--frequency` define the plan on their own, so the third is derived rather than taken from the config;
+one flag on its own combines with the config's other value.
 
 A run passes when at most `max_failure_rate` of its samples failed, every reading is inside the
 ammeter's expected range and no sample was taken later than `max_schedule_error_ms` after its schedule.
