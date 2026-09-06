@@ -112,7 +112,7 @@ class Config:
             frequency_hz=_optional(sampling, "sampling_frequency_hz", float),
             max_failure_rate=_value(testing, "max_failure_rate", float, 0.0),
             max_schedule_error_ms=_optional(testing, "max_schedule_error_ms", float),
-            retry_attempts=_value(retry, "attempts", int, 1),  # 1 by default: never change failure semantics
+            retry_attempts=_value(retry, "attempts", int, 1),  # off by default: never change failure semantics
             retry_backoff_s=_value(retry, "backoff_seconds", float, 0.005),
             simulated_failure_rate=_value(simulation, "failure_rate", float, 0.0),
             simulation_seed=_optional(simulation, "seed", int),

@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -79,15 +80,19 @@ class Sample:
         return self.error is None
 
 
-def collect_samples(measure: Measure, plan: SamplingPlan, name: str) -> list[Sample]:
+def collect_samples(
+    measure: Measure, plan: SamplingPlan, name: str, cancelled: Optional[threading.Event] = None
+) -> list[Sample]:
     """Take plan.count measurements on a fixed schedule. Failed measurements are recorded, not raised.
 
-    `name` is required rather than defaulted: concurrent samplers interleave their log lines, and a
-    default would let a future call site quietly reintroduce anonymous ones.
+    Raises KeyboardInterrupt if `cancelled` is set, before the run reaches the archive: a cancelled run
+    is not a result. SIGINT only reaches the main thread, so a worker has to be told.
     """
     samples = []
     start = time.perf_counter()
     for index in range(plan.count):
+        if cancelled is not None and cancelled.is_set():
+            raise KeyboardInterrupt(f"{name}: cancelled after {index} samples")
         scheduled = index * plan.interval_s
         _wait_until(start + scheduled)
 

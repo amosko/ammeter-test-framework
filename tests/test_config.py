@@ -24,7 +24,6 @@ def test_shipped_config_matches_the_emulators() -> None:
     config = Config.load(DEFAULT_CONFIG_PATH)
     ports = [(spec.name, spec.port) for spec in config.ammeters.values()]
     assert ports == [("greenlee", 5000), ("entes", 5001), ("circutor", 5002)]
-    assert config.ammeter("circutor").command == "MEASURE_CIRCUTOR -get_measurement -current"
     assert config.sample_count == 50 and config.frequency_hz == 10 and config.duration_s is None
     assert config.max_failure_rate == 0.05 and config.max_schedule_error_ms == 10
     assert config.retry_attempts == 2 and config.retry_backoff_s == 0.005

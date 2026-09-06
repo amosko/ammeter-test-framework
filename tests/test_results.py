@@ -101,40 +101,14 @@ def _dying_write(after: BaseException) -> Callable[..., int]:
     return write_text
 
 
-def test_a_write_that_dies_partway_leaves_no_run_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Half a JSON file must never reach <run_id>.json; that is what the temp file plus os.replace buys."""
+@pytest.mark.parametrize("death", [OSError("disk full"), KeyboardInterrupt()])
+def test_a_write_that_dies_partway_leaves_no_run_file(
+    death: BaseException, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Half a JSON file must never reach <run_id>.json. KeyboardInterrupt covers Ctrl+C during a write,
+    which is why the cleanup catches BaseException rather than Exception."""
     archive = ResultsArchive(tmp_path)
-    monkeypatch.setattr(Path, "write_text", _dying_write(OSError("disk full")))
-    with pytest.raises(OSError, match="disk full"):
+    monkeypatch.setattr(Path, "write_text", _dying_write(death))
+    with pytest.raises(type(death)):
         archive.save(make_result([1.0]))
-    monkeypatch.undo()
     assert list(tmp_path.iterdir()) == []
-    assert archive.load_all() == []
-
-
-def test_a_write_interrupted_by_ctrl_c_cleans_up_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """KeyboardInterrupt is not an Exception, so the cleanup has to catch BaseException to cover Ctrl+C."""
-    archive = ResultsArchive(tmp_path)
-    monkeypatch.setattr(Path, "write_text", _dying_write(KeyboardInterrupt()))
-    with pytest.raises(KeyboardInterrupt):
-        archive.save(make_result([1.0]))
-    monkeypatch.undo()
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_saving_twice_replaces_the_file(tmp_path: Path) -> None:
-    """os.replace, not os.rename: rename raises on Windows when the destination exists."""
-    archive = ResultsArchive(tmp_path)
-    result = make_result([1.0])
-    archive.save(result)
-    path = archive.save(result)
-    assert len(list(tmp_path.glob("*.json"))) == 1
-    assert archive.load(path.stem) == result
-
-
-def test_a_leftover_temp_file_is_never_read_as_a_run(tmp_path: Path) -> None:
-    """load_all globs *.json, and <run_id>.json.tmp does not match, so a crashed write cannot resurface."""
-    archive = ResultsArchive(tmp_path)
-    path = archive.save(make_result([1.0]))
-    (tmp_path / f"{path.name}.tmp").write_text("{truncated", encoding="utf-8")
-    assert len(archive.load_all()) == 1

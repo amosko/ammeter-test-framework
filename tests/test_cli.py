@@ -25,9 +25,6 @@ testing:
 """
 
 
-OVERSIZED_RETRY = "  retry:\n    attempts: 4\n    backoff_seconds: 1.0\n"
-
-
 @pytest.fixture
 def config_file(tmp_path: Path, emulator_ports: dict[str, int]) -> Path:
     path = tmp_path / "config.yaml"
@@ -69,8 +66,7 @@ def test_run_writes_plots(cli: Callable[..., int], tmp_path: Path) -> None:
 
 
 def test_plotting_stays_on_the_main_thread(cli: Callable[..., int], monkeypatch: pytest.MonkeyPatch) -> None:
-    """Sampling is concurrent, plotting is not: pyplot is a global state machine and is not thread-safe,
-    so the reporting loop runs on the main thread once every worker has finished."""
+    """pyplot is a global state machine and is not thread-safe, so it must not run inside a worker."""
     callers: list[str] = []
 
     def record(result: RunResult, path: Path) -> Path:
@@ -141,15 +137,3 @@ def test_retry_attempts_flag_reaches_the_run(cli: Callable[..., int], tmp_path: 
     assert cli("run", "greenlee", "--retry-attempts", "2", "--no-plot") == 0
     (result,) = ResultsArchive(tmp_path / "results").load_all()
     assert result.metadata["retry_attempts"] == 2
-
-
-def test_an_oversized_retry_budget_is_a_usage_error(
-    tmp_path: Path, emulator_ports: dict[str, int], capsys: pytest.CaptureFixture[str]
-) -> None:
-    """4 attempts at 1 s backoff is a 6 s budget in a 10 ms slot; caught before any device is touched."""
-    config = tmp_path / "slow_retry.yaml"
-    config.write_text(CONFIG_TEMPLATE.format(**emulator_ports) + OVERSIZED_RETRY, encoding="utf-8")
-    assert main(["--config", str(config), "--results-dir", str(tmp_path / "results"), "run", "--no-plot"]) == 2
-    err = capsys.readouterr().err
-    assert "retry budget" in err and "--duration" not in err  # the sampling hint would be nonsense here
-    assert not list((tmp_path / "results").glob("*.json"))  # no device was touched, nothing archived

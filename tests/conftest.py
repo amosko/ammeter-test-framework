@@ -30,7 +30,13 @@ def config(emulator_ports: dict[str, int], tmp_path: Path) -> Config:
     shipped = Config.load(DEFAULT_CONFIG_PATH)
     ammeters = {name: dataclasses.replace(spec, port=emulator_ports[name]) for name, spec in shipped.ammeters.items()}
     return dataclasses.replace(
-        shipped, ammeters=ammeters, sample_count=5, duration_s=None, frequency_hz=100, results_dir=tmp_path / "results"
+        shipped,
+        ammeters=ammeters,
+        sample_count=5,
+        duration_s=None,
+        frequency_hz=100,
+        retry_attempts=1,  # the 10 ms interval must not depend on the shipped retry budget
+        results_dir=tmp_path / "results",
     )
 
 

@@ -102,7 +102,7 @@ class ResultsArchive:
         """Write the run atomically: readers see a complete file or none at all."""
         self.directory.mkdir(parents=True, exist_ok=True)
         path = self.path_for(result.run_id)
-        tmp = path.parent / f"{path.name}.tmp"  # not .with_suffix(): load_all globs *.json, and this never matches
+        tmp = path.parent / f"{path.name}.tmp"  # .json.tmp, not .tmp: a leftover is still traceable to its run
         try:
             tmp.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
             os.replace(tmp, path)  # atomic within one filesystem, on POSIX and Windows

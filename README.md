@@ -46,9 +46,8 @@ Single-terminal alternative: `python3 run_tests.py run --start-emulators` starts
 background for the duration of the run.
 
 The ammeters are sampled concurrently, one worker each, so a full run covers a single measurement window
-rather than three consecutive ones — the shipped 50 samples at 10 Hz take about 5 seconds in total, not
-15, and the three ammeters are directly comparable because they were measured at the same time. The
-reports print together once every ammeter has finished.
+rather than three consecutive ones — the shipped 50 samples at 10 Hz take about 5 seconds, not 15.
+Reports print together once every ammeter has finished.
 
 Progress goes to stderr as `[INFO]` lines; the report goes to stdout:
 
@@ -75,9 +74,9 @@ Most consistent (lowest CV): circutor at 52.86%
 
 ## Commands
 
-| Command                         | What it does                                                          |
-|---------------------------------|-----------------------------------------------------------------------|
-| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive, plot |
+| Command                         | What it does                                                           |
+|---------------------------------|------------------------------------------------------------------------|
+| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive |
 | `list`                          | Table of archived runs                                                 |
 | `show RUN_ID`                   | Report of one archived run                                             |
 | `compare RUN_ID ... / --latest` | Precision ranking of several runs, plus a comparison plot              |
@@ -135,9 +134,7 @@ ammeter's expected range and no sample was taken later than `max_schedule_error_
 
 Transient transport failures (a refused connection, a timeout) are retried, so a single dropped handshake
 does not count as a device fault. Protocol errors are never retried: an unanswered or non-numeric reply
-means a wrong command or port, which is identical on every attempt. The backoff sleeps inside the
-sample's slot, so a retry budget that does not fit in the sampling interval is rejected up front rather
-than silently wrecking the schedule.
+means a wrong command or port, which is identical on every attempt.
 
 Adding an ammeter is a config entry: name, host, port, command and optionally its expected range and
 reference current.
@@ -183,7 +180,7 @@ run_tests.py              framework command line entry point
 config/config.yaml        ammeters, sampling, criteria, archive location
 Ammeters/                 the emulators (three lines changed) and the TCP client
 src/testing/
-  ammeter.py              unified Ammeter API and FaultInjector (error simulation)
+  ammeter.py              unified Ammeter API, Retrying, FaultInjector (error simulation)
   sampling.py             SamplingPlan and scheduled sample collection
   analysis.py             statistics, timing, accuracy, verdict
   results.py              RunResult and the JSON archive

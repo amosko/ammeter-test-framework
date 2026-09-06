@@ -22,50 +22,30 @@ mock, a fault injector wrapping a real ammeter) plugs in without touching the re
 
 ### Concurrency
 
-`run_selected` gives each ammeter its own worker, so a three-ammeter run covers **one** wall clock window
+`run_selected` gives each ammeter its own worker, so a three-ammeter run covers one wall clock window
 instead of three consecutive ones. That is what makes `compare` defensible: readings taken in the same
 window are commensurable, whereas three sequential windows silently absorb anything about the host that
-changed between them, and the CV ranking then partly measures the host. It is also three times faster —
-the shipped 50 samples at 10 Hz take about 5 s in total rather than 15.
+changed between them. It is also three times faster — 50 samples at 10 Hz take about 5 s, not 15.
 
-It is safe *because* each ammeter is its own single-threaded server on its own port, so three workers
-hitting three servers contend for nothing. Concurrency *within* one ammeter would serialise on that
-server's accept loop and is not what this does. Results come back in the order given, not in completion
-order, so `.result()` re-raises the first failure deterministically. A single-ammeter run skips the pool
-entirely and behaves exactly as before. Plotting stays on the main thread after every worker has
-finished: `pyplot` is a global state machine and is not thread-safe.
+It is safe because each ammeter is its own single-threaded server on its own port, so the workers contend
+for nothing; concurrency *within* one ammeter would serialise on that server's accept loop. Results come
+back in the order given rather than completion order, so the first failure re-raises deterministically.
+Every device is checked for reachability before the pool starts, since the pool would otherwise hide an
+unreachable one behind a full sampling window of the healthy devices. Plotting stays on the main thread
+after every worker has finished: `pyplot` is a global state machine and is not thread-safe. `SIGINT`
+reaches only the main thread, so Ctrl+C sets an event the samplers check; a cancelled run raises before
+it reaches the archive, because a cancelled run is not a result.
 
-If one ammeter is unreachable the exception surfaces before anything is printed, so the console shows
-only the error — but **no data is lost**. `run_test` archives each result before returning, so the runs
-that did complete are on disk and `run_tests.py list` shows them.
+`_wait_until` busy-spins for the last `SPIN_WINDOW_S` (2 ms off Windows) and the spin does not release
+the GIL, so workers whose deadlines coincide contend. A worker spins only until its own deadline and then
+blocks on the socket, which bounds the worst case at (N − 1) × `SPIN_WINDOW_S` — 4 ms for three ammeters,
+inside the 10 ms criterion, but worth knowing above roughly 100 Hz or with many more devices. Measured on
+macOS 26 / Python 3.9 with the shipped config, fresh process per run:
 
-**The scheduler interaction, measured.** `_wait_until` sleeps in halving steps and then busy-spins for
-the last `SPIN_WINDOW_S` (2 ms off Windows). `time.sleep` releases the GIL; the spin does not. The three
-workers do start together — their `collect_samples` start times were measured 0.12 ms apart — so their
-deadlines coincide and their spin windows genuinely overlap. The cost is nevertheless small, because a
-worker spins only until *its own* deadline and then blocks on the socket, releasing the GIL: the measured
-spin is 0.118 ms at the median and never exceeded 2.4 ms, and a worker whose deadline has already passed
-exits its spin immediately rather than adding to the queue. The worst case is therefore bounded by
-(N − 1) × `SPIN_WINDOW_S`, which is 4 ms for three ammeters, still inside the 10 ms criterion.
-
-Measured on macOS 26 / Python 3.9, shipped config (10 Hz, 50 samples), fresh process per run:
-
-| Sampling                                     | Max schedule error | Runs |
-|----------------------------------------------|--------------------|------|
-| One ammeter alone (no pool)                  | 0.01 – 0.12 ms     | 5    |
-| Three concurrently                           | 0.15 – 0.90 ms     | 15   |
-| Three concurrently, all 12 cores saturated   | 0.01 – 0.80 ms     | 18   |
-
-So concurrency costs roughly half a millisecond of schedule accuracy against a 10 ms criterion, and
-holds up with the machine fully loaded. The GIL switch interval was left alone: shortening it to 0.5 ms
-(the obvious mitigation) moved the median from 0.711 ms to 0.643 ms and made the maximum *worse*
-(2.934 → 3.502 ms), so a process-global mutation was not worth its complexity.
-
-The caveat is that the spin window is per thread, so N concurrent ammeters spin N times as much. That is
-negligible at the shipped 10 Hz and worth knowing above roughly 100 Hz or with many more devices. At
-100 Hz the tail grows for both modes — sequential reached 6.5 ms and concurrent 3.6 ms over 15 runs each
-in one long-lived process — but that is dominated by GC pauses landing inside a 10 ms interval, which is
-a pre-existing property of the sampler and not something concurrency introduced.
+| Sampling                    | Max schedule error | Runs |
+|-----------------------------|--------------------|------|
+| One ammeter alone (no pool) | 0.01 – 0.12 ms     | 5    |
+| Three concurrently          | 0.15 – 0.90 ms     | 15   |
 
 ## Decisions
 
@@ -108,40 +88,21 @@ measure. The verdict fails a run when more than `max_failure_rate` of the sample
 outside the ammeter's expected range or a sample was taken too late, and the CLI exit code reflects it
 (0 pass, 1 fail, 2 usage).
 
-**Retries, and what must not be retried.** A single dropped TCP handshake would otherwise become a failed
-sample, count against `max_failure_rate` and fail an otherwise healthy run — a test framework reporting a
-transient blip as a device fault is producing false failures, the worst thing it can do. `Retrying` wraps
-any `Measure` and retries `AmmeterConnectionError` and `AmmeterTimeoutError` with linear backoff
-(attempt *n* waits *n* × backoff; exponential buys nothing inside an interval measured in tens of
-milliseconds). `AmmeterProtocolError` is deliberately *not* retried: an unanswered or non-numeric reply
-means a wrong command or a wrong port, which is deterministic and identical on every attempt, so retrying
-burns the sampling budget and delays the moment the operator learns their config is wrong. Having three
-typed transport errors rather than one generic client error is what makes that distinction expressible.
+**Retries, and what must not be retried.** A single dropped TCP handshake would otherwise become a
+failed sample and count against `max_failure_rate`. `Retrying` wraps any `Measure` and retries
+`AmmeterConnectionError` and `AmmeterTimeoutError` with linear backoff. `AmmeterProtocolError` is
+deliberately *not* retried: an unanswered or non-numeric reply means a wrong command or a wrong port,
+which is identical on every attempt, so retrying only delays the report of a configuration fault. Retry
+sits inside the transport and fault injection outside it, so the simulated failure rate in the archived
+metadata means what it says; both retry settings are archived too, since a retried run has different
+failure semantics from one without.
 
-The layering is retry *inside* the transport, fault injection *outside* it: `make_measure` wraps
-`Ammeter.measure` in `Retrying`, and `run_test` wraps the result in `FaultInjector`. `FaultInjector`
-raises bare `AmmeterError`, which is not in `TRANSIENT_ERRORS`, so a simulated fault would not be retried
-away even if the layers were reversed — but keeping the injector outermost makes the simulated failure
-rate in the archived metadata mean exactly what it says, rather than "the rate before retries absorbed
-some of it". Both retry settings go into the metadata too, because a run with retries enabled has
-different failure semantics from one without and the two cannot otherwise be compared honestly.
-
-Backoff sleeps *inside* a sample's slot, so `sampling_plan` rejects a retry budget that does not fit in
-the sampling interval, before any device is touched: otherwise one failing sample pushes every later
-sample late, the schedule collapses and `max_schedule_error_ms` fails the run for a reason that has
-nothing to do with the device. The budget counts only the deliberate sleeping, not the socket timeout —
-worst case per sample is `attempts × timeout + backoffs`, which at the shipped `timeout_seconds: 2.0`
-would be 4 s and would reject every sane config; a device that burns its timeout on every attempt is
-dead, and the connectivity pre-check already fails fast on that. A device that dies *mid-run* still
-overruns its schedule, and that is correct: the run is reported FAIL with a reason, which is the
-framework doing its job, so there is no cap.
-
-The shipped `backoff_seconds` is 5 ms, not the 50 ms that retry conventions borrowed from remote services
-would suggest. The failure being recovered from is a dropped handshake on localhost, where the whole
-request round trip measures about 1.7 ms; 50 ms would consume half of the 100 ms shipped interval and cap
-sampling just under 20 Hz, which would reject this repository's own documented
-`--count 100 --frequency 20` example. At 5 ms the budget is 5% of the shipped slot and the check only
-bites above 200 Hz.
+Backoff sleeps inside a sample's slot, so `sampling_plan` rejects a budget that does not fit in the
+sampling interval before any device is touched — otherwise one failing sample pushes every later sample
+late and fails the timing criterion for a reason unrelated to the device. The shipped `backoff_seconds`
+is 5 ms rather than the conventional 50 ms: the failure being recovered from is a dropped handshake on
+localhost with a round trip of about 1.7 ms, and 50 ms would consume half the shipped interval and cap
+sampling below 20 Hz. At 5 ms the check bites only at 200 Hz and above.
 
 **Statistics from the standard library.** Mean, median, sample standard deviation (n-1), min, max and
 coefficient of variation come from `statistics`; numpy, scipy and pandas were dropped because they
@@ -198,7 +159,7 @@ are pinned the same way, against 200 readings from each emulator.
 | `main.py` | Request commands lacked their arguments, so the emulators closed the connection without answering; nothing was ever read | Reads one value per ammeter with the configured command, so the smoke run validates the config |
 | `main.py` | Startup used a fixed 5 s sleep; a second instance failed with a thread traceback | Waits until each server accepts connections; refuses a port that is already in use; keeps serving until Ctrl+C |
 | `Ammeters/base_ammeter.py` | Restarting failed with "Address already in use" while old connections were in TIME_WAIT (the reason for the "increase sleep time" comment) | `SO_REUSEADDR` on POSIX; on Windows the flag would let two servers bind one port. Three lines changed |
-| `Ammeters/base_ammeter.py` | `random.seed(time.time())` in `__init__` reseeded the *global* RNG that all three emulators draw from through `generate_random_float`, with a low-entropy value shared by emulators constructed in the same millisecond, so the three "independent" devices could restart the same stream | Removed; CPython seeds `random` from `os.urandom` at import, which is both stronger and per-process. An injectable seed was considered and rejected: it would still write to the global module and still stomp the other two. Reproducibility is available without touching the device, via the `make_measure` hook or `FaultInjector(seed=...)` |
+| `Ammeters/base_ammeter.py` | `random.seed(time.time())` in `__init__` reseeded the *global* RNG all three emulators draw from, so devices constructed in the same millisecond could share a stream | Removed; CPython seeds `random` from `os.urandom` at import. An injectable seed would still write to the global module; reproducibility is available via `make_measure` or `FaultInjector(seed=...)` |
 | `Ammeters/client.py` | No timeout, so a silent device hangs forever; printed instead of returning the value; a single `recv` could return a truncated number | Timeout, typed errors, reads until the emulator closes, returns the float |
 | `README.md` | CIRCUTOR command missing `-current`; referenced `AmmeterTester.py` and `run_test.py`, which do not exist | Rewritten |
 | `config/config.yaml` | Every value null or commented out | Filled in, plus criteria and error simulation |

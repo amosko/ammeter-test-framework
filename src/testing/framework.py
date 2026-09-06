@@ -2,6 +2,7 @@
 
 import logging
 import platform
+import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -19,14 +20,13 @@ class AmmeterTestFramework:
     def __init__(self, config: Config):
         self.config = config
         self.archive = ResultsArchive(config.results_dir)
+        self._cancelled = threading.Event()
 
     def sampling_plan(self) -> SamplingPlan:
         """Resolve the plan and reject a retry budget that cannot fit inside one sampling interval."""
         plan = SamplingPlan.resolve(self.config.sample_count, self.config.duration_s, self.config.frequency_hz)
         budget = self.config.retry_budget_s
         if plan.interval_s and budget >= plan.interval_s:
-            # Backoff sleeps inside a sample's slot, so an oversized budget would push every later sample
-            # late and fail max_schedule_error_ms for a reason that has nothing to do with the device.
             raise ConfigError(
                 f"the retry budget of {budget * 1000:.0f} ms per sample does not fit in the "
                 f"{plan.interval_s * 1000:.0f} ms sampling interval; lower testing.retry.attempts or "
@@ -54,7 +54,7 @@ class AmmeterTestFramework:
         pace = f"at {plan.frequency_hz:g} Hz" if plan.frequency_hz else "as fast as possible"
         logger.info("%s: taking %d samples %s", spec.name, plan.count, pace)
         started = datetime.now().astimezone()
-        samples = collect_samples(measure, plan, spec.name)
+        samples = collect_samples(measure, plan, spec.name, self._cancelled)
 
         metadata = {
             "label": label,
@@ -63,7 +63,7 @@ class AmmeterTestFramework:
             "simulated_failure_rate": self.config.simulated_failure_rate,
             "max_failure_rate": self.config.max_failure_rate,
             "max_schedule_error_ms": self.config.max_schedule_error_ms,
-            "retry_attempts": self.config.retry_attempts,  # a retried run has different failure semantics
+            "retry_attempts": self.config.retry_attempts,
             "retry_backoff_s": self.config.retry_backoff_s,
         }
         reference = (
@@ -84,20 +84,20 @@ class AmmeterTestFramework:
         return result
 
     def run_selected(self, names: Sequence[str], label: Optional[str] = None) -> list[RunResult]:
-        """Sample the named ammeters over the same window, one worker each. Results follow the order given.
-
-        Safe because each ammeter is its own single-threaded server on its own port, so the workers
-        contend for nothing. Leaving the `with` block waits for every worker; .result() then re-raises
-        the first failure in the order given rather than in completion order, so the error a user sees
-        is deterministic.
-        """
+        """Sample the named ammeters over the same window, one worker each. Results follow the order given."""
         for name in names:
-            self.config.ammeter(name)  # fail on an unknown name before starting any thread
-        if len(names) < 2:  # no pool for a single ammeter: no thread overhead, behaviour identical
+            self.make_measure(self.config.ammeter(name))()  # unknown or unreachable: fail before the pool
+        if len(names) < 2:
             return [self.run_test(name, label) for name in names]
-        with ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="ammeter") as pool:
+        pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="ammeter")
+        try:
             futures = [pool.submit(self.run_test, name, label) for name in names]
-        return [future.result() for future in futures]
+            return [future.result() for future in futures]
+        except KeyboardInterrupt:
+            self._cancelled.set()  # SIGINT reaches only the main thread; the workers have to be told
+            raise
+        finally:
+            pool.shutdown(wait=True)
 
     def run_all(self, label: Optional[str] = None) -> list[RunResult]:
         return self.run_selected(list(self.config.ammeters), label)

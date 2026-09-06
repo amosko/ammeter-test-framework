@@ -48,12 +48,9 @@ class FaultInjector:
 
 
 class Retrying:
-    """Retries transient transport failures.
+    """Retries transient transport failures; a protocol error is deterministic, so it is never retried.
 
-    A protocol error is not retried: an unanswered or non-numeric reply means the wrong command or port,
-    which is deterministic, so retrying only burns the sampling budget and delays the report of a
-    configuration fault. Backoff is linear rather than exponential because the whole budget has to fit
-    inside a sampling interval measured in tens of milliseconds, where doubling buys nothing.
+    Backoff is linear because the whole budget has to fit inside one sampling interval.
     """
 
     def __init__(self, measure: Measure, attempts: int = 2, backoff_s: float = 0.005) -> None:
@@ -72,4 +69,4 @@ class Retrying:
             except TRANSIENT_ERRORS as exc:
                 logger.debug("attempt %d/%d failed (%s), retrying", attempt, self._attempts, exc)
                 time.sleep(self._backoff_s * attempt)
-        return self._measure()  # the last attempt is not retried, so its error reaches the caller unchanged
+        return self._measure()  # outside the loop: the last error reaches the caller unchanged
