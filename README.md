@@ -12,7 +12,7 @@ The framework treats the emulators as the devices under test and never imports t
 Python 3.9 or newer and two packages:
 
 ```sh
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 | Library    | Used for                                    |
@@ -20,8 +20,8 @@ pip install -r requirements.txt
 | PyYAML     | reading `config/config.yaml`                |
 | matplotlib | optional, the PNG plots (skipped if absent) |
 
-The commands below use `python`; on macOS and most Linux systems the interpreter is called `python3`
-(and pip is `python3 -m pip`).
+The commands below use `python3`, which is what the interpreter is called on macOS and most Linux
+systems. On Windows it is usually `python`.
 
 ## Quick start
 
@@ -29,20 +29,20 @@ Start the emulators in one terminal. `main.py` starts every ammeter listed in th
 reads one value from each as a smoke test and keeps serving until Ctrl+C:
 
 ```sh
-python main.py
+python3 main.py
 ```
 
 Run the framework in a second terminal:
 
 ```sh
-python run_tests.py run                          # sample every configured ammeter
-python run_tests.py run greenlee --count 100 --frequency 20
-python run_tests.py list                         # archived runs
-python run_tests.py show 20260905_222841_entes_fcdbbc8c
-python run_tests.py compare --latest             # latest run of every ammeter, side by side
+python3 run_tests.py run                          # sample every configured ammeter
+python3 run_tests.py run greenlee --count 100 --frequency 20
+python3 run_tests.py list                         # archived runs
+python3 run_tests.py show 20260905_222841_entes_fcdbbc8c
+python3 run_tests.py compare --latest             # latest run of every ammeter, side by side
 ```
 
-Single-terminal alternative: `python run_tests.py run --start-emulators` starts `main.py` in the
+Single-terminal alternative: `python3 run_tests.py run --start-emulators` starts `main.py` in the
 background for the duration of the run.
 
 The ammeters are sampled concurrently, one worker each, so a full run covers a single measurement window
@@ -201,8 +201,8 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 ## Development
 
 ```sh
-pip install -r requirements-dev.txt
-python -m pytest            # 127 tests, about 2 seconds; starts emulators on free ports by itself
-python -m ruff check .
-python -m mypy main.py run_tests.py Ammeters src tests examples
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest            # 127 tests, about 2 seconds; starts emulators on free ports by itself
+python3 -m ruff check .
+python3 -m mypy main.py run_tests.py Ammeters src tests examples
 ```
