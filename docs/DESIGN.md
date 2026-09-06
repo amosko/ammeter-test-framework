@@ -51,9 +51,10 @@ it reaches the archive, because a cancelled run is not a result.
 
 `_wait_until` busy-spins for the last `SPIN_WINDOW_S` (2 ms off Windows) and the spin does not release
 the GIL, so workers whose deadlines coincide contend. A worker spins only until its own deadline and then
-blocks on the socket, which bounds the worst case at (N − 1) × `SPIN_WINDOW_S` — 4 ms for three ammeters,
-inside the 10 ms criterion, but worth knowing above roughly 100 Hz or with many more devices. Measured on
-macOS 26 / Python 3.9 with the shipped config, fresh process per run:
+blocks on the socket, which bounds the worst case at (N − 1) × `SPIN_WINDOW_S`: 4 ms for three ammeters
+where that window is 2 ms, inside the 10 ms criterion. The window is ten times larger on Windows, which
+changes the arithmetic — see cross-platform notes. Measured on macOS 26 / Python 3.9 with the shipped
+config, fresh process per run:
 
 | Sampling                    | Max schedule error | Runs |
 |-----------------------------|--------------------|------|
@@ -192,9 +193,21 @@ Runtime: PyYAML, matplotlib (optional). Development: pytest, mypy, ruff, types-P
 
 ## Cross-platform notes
 
-Pure standard library networking and timing, `pathlib` paths, `matplotlib` in headless (`Agg`) mode.
-`time.sleep` granularity differs per platform (see timing above); the schedule error reported per run
-shows the actual effect on any host.
+Pure standard library networking and timing, `pathlib` paths, `matplotlib` in headless (`Agg`) mode. Run
+ids contain no character Windows forbids in a filename, and the archive is moved into place with
+`os.replace`, which is atomic on both. The schedule error reported per run shows the real effect on any
+host. Two things genuinely differ, both deliberate, neither exercised on Windows here:
+
+- `SO_REUSEADDR` is set only on POSIX, because on Windows the flag lets two servers bind one port. The
+  cost is that restarting `main.py` while old connections sit in TIME_WAIT binds cleanly on POSIX but can
+  fail on Windows, where it surfaces as the emulator not becoming reachable.
+- `SPIN_WINDOW_S` is 20 ms on Windows against 2 ms elsewhere, covering a `time.sleep` granularity of
+  about 15 ms before Python 3.11. Concurrency multiplies it: the bound above becomes 40 ms for three
+  ammeters rather than 4, and above 50 Hz the window exceeds the sampling interval, so every worker spins
+  through its whole slot instead of sleeping. Forcing the 20 ms window on macOS only doubled the measured
+  worst case, to 1.5 ms — far short of the bound and still inside the criterion — but that isolates the
+  GIL contention without reproducing Windows' timer coarseness. On Windows, sample one ammeter at a time
+  above roughly 50 Hz until the timing table has been reproduced there.
 
 ## Extending
 
