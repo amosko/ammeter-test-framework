@@ -139,7 +139,7 @@ def test_an_interrupted_run_stops_the_sibling_workers(config: Config) -> None:
 
     with pytest.raises(KeyboardInterrupt):
         Interrupting(config).run_all()
-    assert seen["entes"] < config.sample_count  # told to stop, rather than sampling on to the end
+    assert seen["entes"] < 60  # told to stop, rather than sampling on to the end
 
 
 def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> None:
