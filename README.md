@@ -212,5 +212,5 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 python3 -m pip install -r requirements-dev.txt
 python3 -m pytest            # 127 tests, about 2 seconds; starts emulators on free ports by itself
 python3 -m ruff check .
-python3 -m mypy main.py run_tests.py Ammeters src tests examples
+python3 -m mypy main.py run_tests.py Ammeters src tests examples   # run on 3.9, the version it targets
 ```
