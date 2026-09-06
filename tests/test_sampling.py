@@ -1,4 +1,5 @@
 import statistics
+import threading
 import time
 from typing import Any, Union
 
@@ -97,3 +98,15 @@ def test_latency_is_measured() -> None:
 
     (sample,) = collect_samples(slow_measure, SamplingPlan(count=1, interval_s=0), "greenlee")
     assert sample.latency_ms >= 10
+
+
+def test_the_cancellation_message_pluralises() -> None:
+    """Cancel after exactly one sample, which is the only count that can read "1 samples"."""
+    cancelled = threading.Event()
+
+    def measure() -> float:
+        cancelled.set()  # checked at the top of the next iteration
+        return 1.0
+
+    with pytest.raises(KeyboardInterrupt, match=r"cancelled after 1 sample$"):
+        collect_samples(measure, SamplingPlan(count=5, interval_s=0), "greenlee", cancelled)

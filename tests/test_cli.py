@@ -161,3 +161,14 @@ def test_retry_attempts_flag_reaches_the_run(cli: Callable[..., int], tmp_path: 
     assert cli("run", "greenlee", "--retry-attempts", "2", "--no-plot") == 0
     (result,) = ResultsArchive(tmp_path / "results").load_all()
     assert result.metadata["retry_attempts"] == 2
+
+
+def test_comparing_one_run_pluralises(
+    cli: Callable[..., int], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli("run", "greenlee", "--count", "2", "--no-plot") == 0
+    capsys.readouterr()
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+
+    assert cli("compare", result.run_id, "--no-plot") == 0
+    assert "Comparison of 1 run\n" in capsys.readouterr().out  # not "1 runs"

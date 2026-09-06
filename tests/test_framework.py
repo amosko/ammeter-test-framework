@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 import threading
 import time
 from datetime import datetime, timedelta
@@ -144,6 +145,13 @@ def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> Non
         assert framework.run_all()[0].statistics is not None
     except KeyboardInterrupt as exc:
         pytest.fail(f"cancellation leaked into the next run: {exc}")
+
+
+def test_the_sampling_log_pluralises(config: Config, caplog: pytest.LogCaptureFixture) -> None:
+    config = dataclasses.replace(config, sample_count=1, frequency_hz=None, duration_s=None)
+    with caplog.at_level(logging.INFO):
+        AmmeterTestFramework(config).run_test("greenlee")
+    assert "taking 1 sample " in caplog.text  # not "1 samples"
 
 
 def test_unknown_ammeter(config: Config) -> None:
