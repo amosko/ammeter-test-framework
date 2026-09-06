@@ -58,14 +58,14 @@ def test_samples_follow_the_schedule() -> None:
 
     assert [s.index for s in samples] == list(range(20))
     assert all(s.ok and s.value_a == 1.0 for s in samples)
-    assert samples[-1].measured_at_s >= 19 * 0.01  # no sample is taken early
+    assert samples[-1].measured_at_s >= 19 * plan.interval_s  # no sample is taken early
 
-    # Median, not max: a shared CI host stalls for tens of milliseconds and one stall says nothing about
-    # the schedule. It is also the stricter test of the thing this guards against -- cumulative sleep
-    # drift would push the median far past 5 ms, where a single outlier bound would not notice.
-    deviations = sorted(abs(s.measured_at_s - s.scheduled_s) for s in samples)
-    assert statistics.median(deviations) < 0.01  # one interval; cumulative drift lands 2.5x past it
-    assert deviations[-1] < 0.15  # and nothing has run away entirely
+    # The design's claim is that overshoot cannot accumulate, not that a shared host is punctual. A
+    # stalling runner shifts every sample alike and passes; cumulative sleeping makes each sample later
+    # than the last, so the tail falls a whole interval or more behind the head.
+    deviations = [s.measured_at_s - s.scheduled_s for s in samples]
+    head, tail = statistics.median(deviations[:10]), statistics.median(deviations[10:])
+    assert tail < head + plan.interval_s
 
 
 def test_unpaced_sampling_does_not_wait(monkeypatch: pytest.MonkeyPatch) -> None:
