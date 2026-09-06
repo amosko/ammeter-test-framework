@@ -23,11 +23,14 @@ class AmmeterEmulatorBase(ABC):
                 conn, addr = s.accept()
                 with conn:
                     print(f"Connected by {addr}")
-                    data = conn.recv(1024)
-                    if data == self.get_current_command:
-                        # Call the specific measure_current() method defined in subclasses
-                        current = self.measure_current()
-                        conn.sendall(str(current).encode('utf-8'))
+                    try:
+                        data = conn.recv(1024)
+                        if data == self.get_current_command:
+                            # Call the specific measure_current() method defined in subclasses
+                            current = self.measure_current()
+                            conn.sendall(str(current).encode('utf-8'))
+                    except OSError as exc:  # a client that vanished must not take the server down
+                        print(f"Dropped connection from {addr}: {exc}")
 
     @property
     @abstractmethod

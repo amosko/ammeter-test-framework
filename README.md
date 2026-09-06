@@ -194,7 +194,7 @@ On macOS, port 5000 may be taken by AirPlay Receiver; change the port in the con
 main.py                   starts the emulators (config driven) and reads one value from each
 run_tests.py              framework command line entry point
 config/config.yaml        ammeters, sampling, criteria, archive location
-Ammeters/                 the emulators (three small fixes, see docs/DESIGN.md) and the TCP client
+Ammeters/                 the emulators (four small fixes, see docs/DESIGN.md) and the TCP client
 src/testing/
   ammeter.py              unified Ammeter API, Retrying, FaultInjector (error simulation)
   sampling.py             SamplingPlan and scheduled sample collection
