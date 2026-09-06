@@ -13,3 +13,4 @@ venv/
 
 # Runtime output
 results/logs/
+examples/results/

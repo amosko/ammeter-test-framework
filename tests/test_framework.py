@@ -60,7 +60,7 @@ def test_sampling_leaves_the_calling_thread_for_the_pool(config: Config) -> None
     recording_framework(config, threads).run_all()
 
     assert set(threads) == set(config.ammeters)
-    assert threading.main_thread().name not in threads.values()
+    assert threading.current_thread().name not in threads.values()
     assert all(name.startswith("ammeter") for name in threads.values())
 
 
@@ -112,6 +112,29 @@ def test_unpaced_sampling_is_not_judged_against_the_schedule(config: Config) -> 
     assert result.plan.interval_s == 0
     assert result.timing.max_schedule_error_ms > 10  # 40 samples of 1 ms: the raw number is elapsed time
     assert result.verdict.passed, result.verdict.reasons
+
+
+def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> None:
+    """Cancellation belongs to one call: if it outlives the run, the next one dies on its first sample."""
+    seen: dict[str, int] = {}
+
+    class Interrupting(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            def measure() -> float:
+                seen[spec.name] = seen.get(spec.name, 0) + 1
+                if spec.name == "entes" and seen[spec.name] > 2:  # past both pre-checks, inside the pool
+                    raise KeyboardInterrupt("simulated Ctrl+C")
+                return 1.0
+
+            return measure
+
+    framework = Interrupting(config)
+    with pytest.raises(KeyboardInterrupt):
+        framework.run_all()
+
+    seen.clear()
+    assert framework.run_test("greenlee").statistics is not None  # not cancelled by the previous run
+    assert framework.run_selected(["greenlee"])[0].statistics is not None
 
 
 def test_unknown_ammeter(config: Config) -> None:

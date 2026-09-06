@@ -157,8 +157,9 @@ reference current.
 
 ## Results
 
-Every run is archived as `results/<run_id>.json` and, unless plotting is off, a matching `<run_id>.png` plot. The run id embeds the
-start time and the ammeter name plus a random suffix, so ids are unique and sort chronologically:
+Every run is archived as `results/<run_id>.json` and, unless plotting is off, a matching `<run_id>.png`
+plot. The run id embeds the start time and the ammeter name plus a random suffix, so ids are unique
+and sort chronologically:
 `20260906_164010_entes_41918e70`.
 
 The JSON holds the ammeter spec, the sampling plan, metadata (label, Python version, platform, the

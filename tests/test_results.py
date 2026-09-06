@@ -65,6 +65,7 @@ def test_runs_in_the_same_second_still_order_by_start_time(tmp_path: Path) -> No
     second = make_result([1.0], datetime(2026, 1, 2, 3, 4, 5, 900_000))
     archive.save(second)
     archive.save(first)
+    assert first.created_at != second.created_at  # the tie the whole-second format used to create
     assert [r.run_id for r in archive.load_all()] == [first.run_id, second.run_id]
     assert archive.latest_per_ammeter() == [second]
 

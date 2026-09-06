@@ -41,6 +41,15 @@ def plot_run(result: RunResult, path: Path) -> Optional[Path]:
     return path
 
 
+def cv_bars(results: Sequence[RunResult]) -> list[tuple[str, float]]:
+    """One entry per run, not per ammeter: several runs of one device are several bars."""
+    return [
+        (r.ammeter.name, r.statistics.cv_percent)
+        for r in results
+        if r.statistics is not None and r.statistics.cv_percent is not None
+    ]
+
+
 def plot_comparison(results: Sequence[RunResult], path: Path) -> Optional[Path]:
     """Reading distribution per ammeter (log scale) and precision as CV."""
     plt = _pyplot()
@@ -55,12 +64,7 @@ def plot_comparison(results: Sequence[RunResult], path: Path) -> Optional[Path]:
     ax_box.set_yscale("log")
     ax_box.set(ylabel="current [A]", title="reading distribution (log scale)")
 
-    # One bar per run, positional: keying by ammeter name collapsed several runs of one device into one.
-    charted = [
-        (r.ammeter.name, r.statistics.cv_percent)
-        for r in results
-        if r.statistics is not None and r.statistics.cv_percent is not None
-    ]
+    charted = cv_bars(results)
     ax_cv.bar(range(len(charted)), [cv for _, cv in charted], color="C1")
     ax_cv.set_xticks(range(len(charted)), [name for name, _ in charted])
     ax_cv.set(ylabel="CV [%]", title="precision: coefficient of variation (lower is better)")

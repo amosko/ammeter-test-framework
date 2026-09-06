@@ -10,13 +10,15 @@ def format_run(result: RunResult) -> str:
     ammeter, timing, plan = result.ammeter, result.timing, result.plan
     pace = f"{plan.frequency_hz:g} Hz" if plan.frequency_hz else "unpaced"
     label = f"  label: {result.metadata['label']}" if result.metadata.get("label") else ""
+    # An unpaced run schedules every sample at zero, so its "schedule error" is only the elapsed time.
+    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.interval_s else ""
     lines = [
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",
         f"  samples   {len(result.values)}/{len(result.samples)} ok, {pace}, "
         f"{timing.actual_span_s:.3g} s (scheduled {timing.planned_span_s:.3g} s)",
-        f"  timing    max schedule error {timing.max_schedule_error_ms:.2f} ms, "
-        f"latency mean {timing.mean_latency_ms:.2f} ms / max {timing.max_latency_ms:.2f} ms",
+        f"  timing    {schedule_error}latency mean {timing.mean_latency_ms:.2f} ms "
+        f"/ max {timing.max_latency_ms:.2f} ms",
     ]
     stats = result.statistics
     if stats is None:
@@ -104,11 +106,6 @@ def _cv_key(result: RunResult) -> float:
 
 def _verdict(result: RunResult) -> str:
     return "PASS" if result.verdict.passed else "FAIL"
-
-
-def plural(count: int, noun: str) -> str:
-    """English plural for the generated reports; "1 runs" reads like a bug in the tool."""
-    return noun if count == 1 else f"{noun}s"
 
 
 def _num(value: Optional[float]) -> str:

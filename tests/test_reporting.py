@@ -4,7 +4,9 @@ from typing import Optional
 from src.testing.reporting import format_comparison, format_listing, format_run
 from src.testing.results import RunResult
 from src.testing.sampling import Sample, SamplingPlan
+from src.testing.visualization import cv_bars
 from src.utils.config import AmmeterSpec
+from src.utils.text import plural
 
 
 def make_result(
@@ -70,3 +72,19 @@ def test_comparison_ranks_by_precision_and_accuracy() -> None:
     assert "Most consistent (lowest CV): circutor at 10%" in comparison
     assert "Most accurate (lowest mean abs error): circutor at 6.667%" in comparison
     assert format_comparison([]) == "nothing to compare"
+
+
+def test_generated_output_pluralises() -> None:
+    assert (plural(1, "run"), plural(0, "run"), plural(2, "sample")) == ("run", "runs", "samples")
+
+
+def test_several_runs_of_one_ammeter_are_several_bars() -> None:
+    """Keying the CV chart by ammeter name collapsed them into one bar beside a table listing them all."""
+    runs = [
+        make_result("greenlee", [1.0, 3.0]),
+        make_result("greenlee", [2.0, 9.0]),
+        make_result("entes", [5.0, 5.0]),  # stdev 0, so CV is exactly 0.0
+    ]
+    bars = cv_bars(runs)
+    assert [name for name, _ in bars] == ["greenlee", "greenlee", "entes"]
+    assert bars[-1][1] == 0.0  # a CV of exactly zero is a bar, not a falsy value to drop

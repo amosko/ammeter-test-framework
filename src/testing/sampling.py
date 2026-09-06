@@ -9,6 +9,7 @@ from typing import Optional
 
 from Ammeters.client import AmmeterError
 from src.testing.ammeter import Measure
+from src.utils.text import plural
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,8 @@ class SamplingPlan:
             plan = cls(count, 1 / frequency_hz)
             if duration_s is not None and abs(plan.duration_s - duration_s) > plan.interval_s / 2:
                 raise ValueError(
-                    f"{count} samples at {frequency_hz:g} Hz take {plan.duration_s:g} s, not {duration_s:g} s; "
+                    f"a run of {count} {plural(count, 'sample')} at {frequency_hz:g} Hz takes "
+                    f"{plan.duration_s:g} s, not {duration_s:g} s; "
                     "give only two of count, duration and frequency"
                 )
             return plan
@@ -94,7 +96,7 @@ def collect_samples(
     start = time.perf_counter()
     for index in range(plan.count):
         if cancelled is not None and cancelled.is_set():
-            raise KeyboardInterrupt(f"{name}: cancelled after {index} samples")
+            raise KeyboardInterrupt(f"{name}: cancelled after {index} {plural(index, 'sample')}")
         scheduled = index * plan.interval_s
         _wait_until(start + scheduled)
 

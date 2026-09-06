@@ -9,10 +9,10 @@ from datetime import datetime
 from typing import Optional
 
 from src.testing.ammeter import Ammeter, FaultInjector, Measure, Retrying
-from src.testing.reporting import plural
 from src.testing.results import ResultsArchive, RunResult
 from src.testing.sampling import SamplingPlan, collect_samples
 from src.utils.config import AmmeterSpec, Config, ConfigError
+from src.utils.text import plural
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ class AmmeterTestFramework:
     def __init__(self, config: Config):
         self.config = config
         self.archive = ResultsArchive(config.results_dir)
-        self._cancelled = threading.Event()
 
     def sampling_plan(self) -> SamplingPlan:
         """Resolve the plan and reject a retry budget that cannot fit inside one sampling interval."""
@@ -42,7 +41,9 @@ class AmmeterTestFramework:
             measure = Retrying(measure, self.config.retry_attempts, self.config.retry_backoff_s)
         return measure
 
-    def run_test(self, ammeter_type: str, label: Optional[str] = None) -> RunResult:
+    def run_test(
+        self, ammeter_type: str, label: Optional[str] = None, cancelled: Optional[threading.Event] = None
+    ) -> RunResult:
         """Run one sampling test. Raises ConfigError for unknown ammeters and AmmeterError if unreachable."""
         spec = self.config.ammeter(ammeter_type)
         plan = self.sampling_plan()
@@ -55,7 +56,7 @@ class AmmeterTestFramework:
         pace = f"at {plan.frequency_hz:g} Hz" if plan.frequency_hz else "as fast as possible"
         logger.info("%s: taking %d %s %s", spec.name, plan.count, plural(plan.count, "sample"), pace)
         started = datetime.now().astimezone()
-        samples = collect_samples(measure, plan, spec.name, self._cancelled)
+        samples = collect_samples(measure, plan, spec.name, cancelled)
 
         metadata = {
             "label": label,
@@ -63,7 +64,8 @@ class AmmeterTestFramework:
             "platform": platform.platform(),
             "simulated_failure_rate": self.config.simulated_failure_rate,
             "max_failure_rate": self.config.max_failure_rate,
-            "max_schedule_error_ms": self.config.max_schedule_error_ms,
+            # the limit that was applied: an unpaced run has no schedule to be late against
+            "max_schedule_error_ms": self.config.max_schedule_error_ms if plan.interval_s else None,
             "retry_attempts": self.config.retry_attempts,
             "retry_backoff_s": self.config.retry_backoff_s,
         }
@@ -90,13 +92,13 @@ class AmmeterTestFramework:
             return [self.run_test(name, label) for name in names]  # run_test does its own pre-check
         for name in names:
             self.make_measure(self.config.ammeter(name))()  # unknown or unreachable: fail before the pool
-        self._cancelled.clear()  # a framework reused after a Ctrl+C must not cancel its next run
+        cancelled = threading.Event()  # per call, so a cancelled run cannot reach into the next one
         pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="ammeter")
         try:
-            futures = [pool.submit(self.run_test, name, label) for name in names]
+            futures = [pool.submit(self.run_test, name, label, cancelled) for name in names]
             return [future.result() for future in futures]
         except KeyboardInterrupt:
-            self._cancelled.set()  # SIGINT reaches only the main thread; the workers have to be told
+            cancelled.set()  # SIGINT reaches only the main thread; the workers have to be told
             raise
         finally:
             pool.shutdown(wait=True)

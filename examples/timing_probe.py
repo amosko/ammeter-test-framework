@@ -1,4 +1,5 @@
-"""Measure the framework's wait against a single sleep: rows 2 and 3 of the timing table in docs/DESIGN.md.
+"""Measure the framework's wait against a single sleep: the max schedule error behind the timing table
+in docs/DESIGN.md.
 
 Run: python examples/timing_probe.py [frequency_hz] [count]
 """

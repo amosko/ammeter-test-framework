@@ -14,11 +14,12 @@ from typing import Any, Optional
 
 from Ammeters.client import AmmeterConnectionError, AmmeterError, is_listening
 from src.testing.framework import AmmeterTestFramework
-from src.testing.reporting import format_comparison, format_listing, format_run, plural
+from src.testing.reporting import format_comparison, format_listing, format_run
 from src.testing.results import RunResult
 from src.testing.visualization import plot_comparison, plot_run
 from src.utils.config import DEFAULT_CONFIG_PATH, AmmeterSpec, Config, ConfigError
 from src.utils.logger import configure_logging
+from src.utils.text import plural
 
 ROOT = Path(__file__).resolve().parents[2]
 EMULATOR_START_TIMEOUT_S = 10

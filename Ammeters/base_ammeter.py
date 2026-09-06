@@ -29,7 +29,7 @@ class AmmeterEmulatorBase(ABC):
                             # Call the specific measure_current() method defined in subclasses
                             current = self.measure_current()
                             conn.sendall(str(current).encode('utf-8'))
-                    except OSError as exc:  # a client that vanished must not take the server down
+                    except Exception as exc:  # a vanished client, or a bad reading, must not end the loop
                         print(f"Dropped connection from {addr}: {exc}")
 
     @property

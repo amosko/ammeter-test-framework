@@ -123,7 +123,7 @@ class Config:
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    """The raw mapping, kept separate from Config so a caller can read the file without validating it."""
+    """The raw mapping. Kept as the original module's API; Config.load validates on top of it."""
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
