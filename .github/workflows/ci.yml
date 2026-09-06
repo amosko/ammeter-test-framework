@@ -47,3 +47,42 @@ jobs:
       - run: python run_tests.py run --start-emulators
       - run: python run_tests.py list
       - run: python run_tests.py compare --latest --no-plot
+
+  # TEMPORARY: diagnosing the windows protocol error and the macos schedule error seen in CI.
+  diagnose:
+    name: diagnose / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r requirements.txt
+      - name: which address does localhost resolve to, and who answers on it
+        run: |
+          python -c "
+          import socket, subprocess, sys, time
+          for a in socket.getaddrinfo('localhost', 5000, type=socket.SOCK_STREAM):
+              print('resolves to', a[0].name, a[4])
+          p = subprocess.Popen([sys.executable, 'main.py'])
+          time.sleep(6)
+          for fam, _t, _p, _c, addr in socket.getaddrinfo('localhost', 5000, type=socket.SOCK_STREAM):
+              s = socket.socket(fam, socket.SOCK_STREAM); s.settimeout(3)
+              try:
+                  s.connect(addr); s.sendall(b'MEASURE_GREENLEE -get_measurement')
+                  print(fam.name, addr, '->', repr(s.recv(1024)[:40]))
+              except OSError as e:
+                  print(fam.name, addr, 'ERROR', e)
+              finally:
+                  s.close()
+          p.terminate()
+          "
+      - name: one ammeter alone vs three concurrently
+        continue-on-error: true
+        run: |
+          python run_tests.py run greenlee --start-emulators --no-plot
+          python run_tests.py run --start-emulators --no-plot
