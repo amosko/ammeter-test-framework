@@ -1,6 +1,7 @@
 import dataclasses
 import threading
 import time
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -43,14 +44,13 @@ def recording_framework(config: Config, threads: dict[str, str]) -> AmmeterTestF
 
 
 def test_run_all_samples_the_ammeters_over_the_same_window(config: Config) -> None:
-    started = time.monotonic()
+    """Compare each run's own sampling window rather than wall-clock totals: elapsed time also carries the
+    pre-checks and the archive writes, which on a slow host outweigh a 40 ms span and say nothing."""
     results = AmmeterTestFramework(config).run_all()
-    elapsed = time.monotonic() - started
 
-    # Sampled end to end, the run would take at least the sum of the spans, plus the archiving between
-    # them. A multiple of the longest span is not usable as the bound: where the spin window exceeds the
-    # sampling interval (Windows before 3.11) the workers spin through their whole slot and overlap less.
-    assert elapsed < sum(r.timing.actual_span_s for r in results)
+    starts = [datetime.fromisoformat(r.created_at) for r in results]
+    ends = [start + timedelta(seconds=r.timing.actual_span_s) for start, r in zip(starts, results)]
+    assert max(starts) < min(ends)  # an instant when every ammeter was sampling; sequential has none
 
 
 def test_sampling_leaves_the_calling_thread_for_the_pool(config: Config) -> None:
