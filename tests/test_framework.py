@@ -88,14 +88,25 @@ def test_an_unreachable_ammeter_fails_before_any_sampling_starts(config: Config)
 
 
 def test_unpaced_sampling_is_not_judged_against_the_schedule(config: Config) -> None:
-    """Every unpaced sample is scheduled at 0, so the "error" would be the run duration and always fail."""
+    """Every unpaced sample is scheduled at 0, so the "error" is the elapsed time and would always fail."""
+
+    class SlowFramework(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            def measure() -> float:
+                deadline = time.perf_counter() + 0.001  # spin, so the run outlasts the limit on any host
+                while time.perf_counter() < deadline:
+                    pass
+                return 1.0
+
+            return measure
+
     config = dataclasses.replace(
-        config, sample_count=60, frequency_hz=None, duration_s=None, max_schedule_error_ms=10
+        config, sample_count=40, frequency_hz=None, duration_s=None, max_schedule_error_ms=10
     )
-    result = AmmeterTestFramework(config).run_test("greenlee")
+    result = SlowFramework(config).run_test("greenlee")
 
     assert result.plan.interval_s == 0
-    assert result.timing.max_schedule_error_ms > 10  # the raw number is the elapsed time, not an error
+    assert result.timing.max_schedule_error_ms > 10  # 40 samples of 1 ms: the raw number is elapsed time
     assert result.verdict.passed, result.verdict.reasons
 
 
