@@ -30,9 +30,20 @@ def read_current(host: str, port: int, command: str, timeout_s: float = 2.0) -> 
 
     The timeout applies separately to connecting and to waiting for the reply.
     """
+    # Connecting and waiting for the reply are separate failures: a connect that times out means the
+    # device is not there, which is what a refused connection means on POSIX. Windows drops rather than
+    # refuses, so without this split the same dead port is a connection error on one platform and a
+    # timeout on the other, and only one of them earns the "start the emulators" hint.
+    try:
+        sock = socket.create_connection((host, port), timeout=timeout_s)
+    except socket.timeout as exc:
+        raise AmmeterConnectionError(f"connection to {host}:{port} timed out after {timeout_s}s") from exc
+    except OSError as exc:
+        raise AmmeterConnectionError(f"connection to {host}:{port} failed: {exc}") from exc
+
     chunks: list[bytes] = []
     try:
-        with socket.create_connection((host, port), timeout=timeout_s) as sock:
+        with sock:
             sock.sendall(command.encode())
             while chunk := sock.recv(1024):
                 chunks.append(chunk)

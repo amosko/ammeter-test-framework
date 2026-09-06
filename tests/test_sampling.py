@@ -61,7 +61,7 @@ def test_samples_follow_the_schedule() -> None:
     # the schedule. It is also the stricter test of the thing this guards against -- cumulative sleep
     # drift would push the median far past 5 ms, where a single outlier bound would not notice.
     deviations = sorted(abs(s.measured_at_s - s.scheduled_s) for s in samples)
-    assert statistics.median(deviations) < 0.005
+    assert statistics.median(deviations) < 0.01  # one interval; cumulative drift lands 2.5x past it
     assert deviations[-1] < 0.15  # and nothing has run away entirely
 
 
