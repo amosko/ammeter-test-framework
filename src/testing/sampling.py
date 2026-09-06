@@ -12,8 +12,10 @@ from src.testing.ammeter import Measure
 
 logger = logging.getLogger(__name__)
 
-# Busy-wait this close to each deadline; sleep granularity is ~15 ms on Windows before Python 3.11, ~1 ms elsewhere.
-SPIN_WINDOW_S = 0.02 if sys.platform == "win32" else 0.002
+# Busy-wait this close to each deadline, sized to the platform's sleep granularity: ~15 ms on Windows
+# before 3.11, which switched time.sleep to a high-resolution timer, and ~1 ms everywhere else.
+COARSE_SLEEP = sys.platform == "win32" and sys.version_info < (3, 11)
+SPIN_WINDOW_S = 0.02 if COARSE_SLEEP else 0.002
 
 
 @dataclass(frozen=True)
