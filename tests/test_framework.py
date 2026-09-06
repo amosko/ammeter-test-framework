@@ -47,8 +47,10 @@ def test_run_all_samples_the_ammeters_over_the_same_window(config: Config) -> No
     results = AmmeterTestFramework(config).run_all()
     elapsed = time.monotonic() - started
 
-    longest = max(r.timing.actual_span_s for r in results)
-    assert elapsed < longest * 1.5  # three sequential windows would take at least 3x the longest
+    # Sampled end to end, the run would take at least the sum of the spans, plus the archiving between
+    # them. A multiple of the longest span is not usable as the bound: where the spin window exceeds the
+    # sampling interval (Windows before 3.11) the workers spin through their whole slot and overlap less.
+    assert elapsed < sum(r.timing.actual_span_s for r in results)
 
 
 def test_every_ammeter_gets_its_own_worker(config: Config) -> None:

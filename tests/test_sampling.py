@@ -88,7 +88,9 @@ def test_failures_are_recorded_not_raised() -> None:
 
 def test_latency_is_measured() -> None:
     def slow_measure() -> float:
-        time.sleep(0.01)
+        deadline = time.perf_counter() + 0.01  # spin, not sleep: sleep undershoots on Windows before 3.11
+        while time.perf_counter() < deadline:
+            pass
         return 1.0
 
     (sample,) = collect_samples(slow_measure, SamplingPlan(count=1, interval_s=0), "greenlee")
