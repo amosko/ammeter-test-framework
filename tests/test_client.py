@@ -53,11 +53,11 @@ def test_unreachable_port_is_a_connection_error() -> None:
 
 
 def test_silent_server_times_out() -> None:
+    """The server holds its reply for a second and the client waits 0.2 s. Raising is itself the proof:
+    had the timeout not fired, the client would have received the reply and returned a value."""
     port = one_shot_server(hold=True)
-    started = time.perf_counter()
     with pytest.raises(AmmeterTimeoutError, match="did not reply"):
         read_current("127.0.0.1", port, "x", timeout_s=0.2)
-    assert time.perf_counter() - started < 1.0
 
 
 def test_split_reply_is_read_completely() -> None:

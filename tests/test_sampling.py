@@ -68,11 +68,12 @@ def test_samples_follow_the_schedule() -> None:
     assert deviations[-1] < 0.15  # and nothing has run away entirely
 
 
-def test_unpaced_sampling_does_not_wait() -> None:
-    started = time.perf_counter()
+def test_unpaced_sampling_does_not_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Assert it never sleeps, rather than that it finished quickly: a wall-clock ceiling only says the
+    host was not busy at the time."""
+    monkeypatch.setattr("src.testing.sampling.time.sleep", lambda _: pytest.fail("unpaced sampling slept"))
     samples = collect_samples(lambda: 1.0, SamplingPlan(count=100, interval_s=0), "greenlee")
     assert len(samples) == 100
-    assert time.perf_counter() - started < 0.5
 
 
 def test_failures_are_recorded_not_raised() -> None:
