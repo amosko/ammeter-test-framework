@@ -88,3 +88,9 @@ def test_several_runs_of_one_ammeter_are_several_bars() -> None:
     bars = cv_bars(runs)
     assert [name for name, _ in bars] == ["greenlee", "greenlee", "entes"]
     assert bars[-1][1] == 0.0  # a CV of exactly zero is a bar, not a falsy value to drop
+
+
+def test_a_single_sample_report_omits_the_empty_scheduled_span() -> None:
+    """One paced sample is scheduled at zero, so "(scheduled 0 s)" is a number rather than information."""
+    result = make_result("greenlee", [1.0])
+    assert "(scheduled" not in format_run(result)

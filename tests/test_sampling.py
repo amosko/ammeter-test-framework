@@ -67,13 +67,19 @@ def test_samples_follow_the_schedule() -> None:
     head, tail = statistics.median(deviations[:10]), statistics.median(deviations[10:])
     assert tail < head + plan.interval_s
 
+    # The head/tail check above is invariant to a uniform shift by construction, which is what makes it
+    # host-independent and also what makes it blind: without this, a sampler late on every sample passes.
+    # 20 intervals is far above the 11.9 ms a macOS runner produced and far below any real lateness.
+    assert statistics.median(deviations) < 20 * plan.interval_s
+
 
 def test_unpaced_sampling_does_not_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """Assert it never sleeps, rather than that it finished quickly: a wall-clock ceiling only says the
     host was not busy at the time."""
-    monkeypatch.setattr("src.testing.sampling.time.sleep", lambda _: pytest.fail("unpaced sampling slept"))
+    slept: list[float] = []  # recorded, not failed on: this patches the process-wide time.sleep, and
+    monkeypatch.setattr("src.testing.sampling.time.sleep", slept.append)  # pytest.fail in a thread kills it
     samples = collect_samples(lambda: 1.0, SamplingPlan(count=100, interval_s=0), "greenlee")
-    assert len(samples) == 100
+    assert len(samples) == 100 and slept == []
 
 
 def test_failures_are_recorded_not_raised() -> None:

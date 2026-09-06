@@ -75,3 +75,15 @@ def test_bad_replies_are_protocol_errors(reply: bytes) -> None:
 def test_wait_for_ammeter_gives_up() -> None:
     with pytest.raises(AmmeterConnectionError, match="not reachable"):
         wait_for_ammeter("127.0.0.1", free_port(), timeout_s=0.2)
+
+
+def test_a_connect_that_times_out_is_a_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows drops where POSIX refuses; both mean the device is not there, so both must be the same
+    error, or only one of them earns the CLI's "start the emulators" hint."""
+
+    def times_out(*args: object, **kwargs: object) -> socket.socket:
+        raise socket.timeout("timed out")
+
+    monkeypatch.setattr(socket, "create_connection", times_out)
+    with pytest.raises(AmmeterConnectionError, match="timed out after 0.2s"):
+        read_current("127.0.0.1", 1, "x", timeout_s=0.2)

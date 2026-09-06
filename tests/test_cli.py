@@ -172,3 +172,22 @@ def test_comparing_one_run_pluralises(
 
     assert cli("compare", result.run_id, "--no-plot") == 0
     assert "Comparison of 1 run\n" in capsys.readouterr().out  # not "1 runs"
+
+
+def test_run_writes_a_log_file(cli: Callable[..., int], tmp_path: Path) -> None:
+    """The original defect was a log path computed but never attached to a handler."""
+    assert cli("run", "greenlee", "--count", "2", "--no-plot") == 0
+    logs = list((tmp_path / "results" / "logs").glob("*.log"))
+    assert len(logs) == 1 and "greenlee" in logs[0].read_text(encoding="utf-8")
+
+
+def test_reference_enables_the_accuracy_metrics(cli: Callable[..., int], tmp_path: Path) -> None:
+    assert cli("run", "greenlee", "--count", "2", "--reference", "3", "--no-plot") == 0
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+    assert result.accuracy is not None and result.accuracy.reference_a == 3.0
+
+
+def test_no_plot_suppresses_the_png(cli: Callable[..., int], tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    assert cli("run", "greenlee", "--count", "2", "--no-plot") == 0
+    assert list((tmp_path / "results").glob("*.png")) == []

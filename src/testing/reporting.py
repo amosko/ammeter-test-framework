@@ -12,7 +12,7 @@ def format_run(result: RunResult) -> str:
     label = f"  label: {result.metadata['label']}" if result.metadata.get("label") else ""
     # An unpaced run schedules every sample at zero, so both scheduled figures would only be numbers.
     schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.is_paced else ""
-    scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if plan.is_paced else ""
+    scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if timing.planned_span_s else ""
     lines = [
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",

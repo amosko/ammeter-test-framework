@@ -119,6 +119,29 @@ def test_unpaced_sampling_is_not_judged_against_the_schedule(config: Config) -> 
     assert "max schedule error" not in report and "scheduled" not in report
 
 
+def test_an_interrupted_run_stops_the_sibling_workers(config: Config) -> None:
+    """The point of the event: Ctrl+C reaches only the main thread, so the other workers must be told."""
+    config = dataclasses.replace(config, sample_count=60, frequency_hz=200, duration_s=None)
+    seen: dict[str, int] = {}
+
+    class Interrupting(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            def measure() -> float:
+                seen[spec.name] = seen.get(spec.name, 0) + 1
+                # greenlee is first in config order, so its future is the one the main thread is waiting
+                # on -- the same position a real SIGINT interrupts, unlike a later worker whose exception
+                # is only unwrapped once the earlier ones have finished.
+                if spec.name == "greenlee" and seen[spec.name] == 5:
+                    raise KeyboardInterrupt("simulated Ctrl+C")
+                return 1.0
+
+            return measure
+
+    with pytest.raises(KeyboardInterrupt):
+        Interrupting(config).run_all()
+    assert seen["entes"] < config.sample_count  # told to stop, rather than sampling on to the end
+
+
 def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> None:
     """Cancellation belongs to one call: if it outlives the run, the next one dies on its first sample."""
     seen: dict[str, int] = {}
