@@ -55,3 +55,44 @@ jobs:
       - run: python run_tests.py --config ci-config.yaml run --start-emulators
       - run: python run_tests.py --config ci-config.yaml list
       - run: python run_tests.py --config ci-config.yaml compare --latest --no-plot
+
+  # TEMPORARY: the Windows end-to-end job fails where ubuntu and macOS pass. This separates emulator
+  # startup from the CLI so the logs say which half is wrong.
+  diagnose-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r requirements.txt
+      - name: start main.py separately and watch it come up
+        shell: bash
+        run: |
+          python -u main.py > emul.log 2>&1 &
+          echo "main.py pid $!"
+          python - <<'EOF'
+          import socket, time
+          start = time.time()
+          for _ in range(120):
+              s = socket.socket(); s.settimeout(1)
+              try:
+                  s.connect(("127.0.0.1", 5000))
+                  s.sendall(b"MEASURE_GREENLEE -get_measurement")
+                  reply = s.recv(1024)
+                  print(f"answered after {time.time()-start:.1f}s: {reply[:30]!r}")
+                  break
+              except OSError as exc:
+                  print(f"  {time.time()-start:5.1f}s {type(exc).__name__}: {exc}")
+              finally:
+                  s.close()
+              time.sleep(1)
+          EOF
+          echo "--- main.py output so far ---"; cat emul.log
+      - name: now drive the CLI against it
+        shell: bash
+        continue-on-error: true
+        run: python run_tests.py --config config/config.yaml run greenlee -v --no-plot
+      - name: main.py output after the CLI run
+        shell: bash
+        run: cat emul.log

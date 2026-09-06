@@ -16,3 +16,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[[tool.mypy.overrides]]
+# matplotlib is optional and imported lazily; it drags in numpy, whose stubs use syntax newer than the
+# 3.9 target this project checks against. Neither is part of this codebase's own type surface.
+module = ["matplotlib.*", "numpy.*"]
+follow_imports = "skip"
