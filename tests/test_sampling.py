@@ -32,6 +32,8 @@ def test_consistent_triple_is_accepted_and_inconsistent_rejected() -> None:
     assert SamplingPlan.resolve(count=10, duration_s=1.0, frequency_hz=10).count == 10
     with pytest.raises(ValueError, match="give only two"):
         SamplingPlan.resolve(count=10, duration_s=5.0, frequency_hz=10)
+    with pytest.raises(ValueError, match="a run of 1 sample at 10 Hz takes"):  # not "1 samples ... take"
+        SamplingPlan.resolve(count=1, duration_s=5.0, frequency_hz=10)
 
 
 @pytest.mark.parametrize(

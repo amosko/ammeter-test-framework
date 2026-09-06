@@ -8,6 +8,7 @@ import pytest
 from Ammeters.client import AmmeterConnectionError, AmmeterError
 from src.testing.ammeter import FaultInjector, Measure, Retrying
 from src.testing.framework import AmmeterTestFramework
+from src.testing.reporting import format_run
 from src.utils.config import AmmeterSpec, Config, ConfigError
 from tests.helpers import free_port
 
@@ -109,20 +110,25 @@ def test_unpaced_sampling_is_not_judged_against_the_schedule(config: Config) -> 
     )
     result = SlowFramework(config).run_test("greenlee")
 
-    assert result.plan.interval_s == 0
+    assert not result.plan.is_paced
     assert result.timing.max_schedule_error_ms > 10  # 40 samples of 1 ms: the raw number is elapsed time
     assert result.verdict.passed, result.verdict.reasons
+    assert result.metadata["max_schedule_error_ms"] is None  # the limit applied, not the one configured
+    report = format_run(result)
+    assert "max schedule error" not in report and "scheduled" not in report
 
 
 def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> None:
     """Cancellation belongs to one call: if it outlives the run, the next one dies on its first sample."""
     seen: dict[str, int] = {}
+    interrupt = {"armed": True}  # once: the later runs must be free to complete
 
     class Interrupting(AmmeterTestFramework):
         def make_measure(self, spec: AmmeterSpec) -> Measure:
             def measure() -> float:
                 seen[spec.name] = seen.get(spec.name, 0) + 1
-                if spec.name == "entes" and seen[spec.name] > 2:  # past both pre-checks, inside the pool
+                if interrupt["armed"] and spec.name == "entes" and seen[spec.name] > 2:  # inside the pool
+                    interrupt["armed"] = False
                     raise KeyboardInterrupt("simulated Ctrl+C")
                 return 1.0
 
@@ -132,9 +138,12 @@ def test_a_framework_is_reusable_after_an_interrupted_run(config: Config) -> Non
     with pytest.raises(KeyboardInterrupt):
         framework.run_all()
 
-    seen.clear()
-    assert framework.run_test("greenlee").statistics is not None  # not cancelled by the previous run
-    assert framework.run_selected(["greenlee"])[0].statistics is not None
+    try:  # a leaked cancellation raises KeyboardInterrupt, which would abort the run rather than fail it
+        assert framework.run_test("greenlee").statistics is not None
+        assert framework.run_selected(["greenlee"])[0].statistics is not None
+        assert framework.run_all()[0].statistics is not None
+    except KeyboardInterrupt as exc:
+        pytest.fail(f"cancellation leaked into the next run: {exc}")
 
 
 def test_unknown_ammeter(config: Config) -> None:

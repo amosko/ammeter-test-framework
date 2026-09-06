@@ -75,6 +75,12 @@ def test_verdict_fails_on_too_many_failures() -> None:
     assert verdict.reasons == ["1 of 2 samples failed (50%, limit 0%)"]
 
 
+def test_the_failure_reason_pluralises() -> None:
+    """This reason reaches the report and the archived JSON, so "1 of 1 samples" is user visible."""
+    verdict = verdict_for([sample(0, value=None, error="x")])
+    assert verdict.reasons == ["1 of 1 sample failed (100%, limit 0%)"]
+
+
 def test_verdict_fails_out_of_range_readings() -> None:
     verdict = verdict_for([sample(0, 12.0), sample(1, -1.0)])
     assert not verdict.passed

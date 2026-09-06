@@ -7,6 +7,7 @@ from typing import Optional
 
 from src.testing.sampling import Sample
 from src.utils.config import AmmeterSpec
+from src.utils.text import plural
 
 
 @dataclass(frozen=True)
@@ -101,7 +102,10 @@ def evaluate(
     failed = sum(not s.ok for s in samples)
     failure_rate = failed / len(samples)
     if failure_rate > max_failure_rate:
-        reasons.append(f"{failed} of {len(samples)} samples failed ({failure_rate:.0%}, limit {max_failure_rate:.0%})")
+        reasons.append(
+            f"{failed} of {len(samples)} {plural(len(samples), 'sample')} failed "
+            f"({failure_rate:.0%}, limit {max_failure_rate:.0%})"
+        )
     if stats is not None:
         if spec.expected_min_a is not None and stats.minimum < spec.expected_min_a:
             reasons.append(f"minimum {stats.minimum:.4g} A is below the expected {spec.expected_min_a:g} A")

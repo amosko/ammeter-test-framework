@@ -55,10 +55,9 @@ class RunResult:
             statistics=stats,
             timing=timing,
             accuracy=AccuracyStats.from_values(values, reference_a) if values and reference_a is not None else None,
-            # Unpaced sampling schedules every sample at 0, so the "error" would be the run duration.
             verdict=evaluate(
                 samples, stats, timing, spec, max_failure_rate,
-                max_schedule_error_ms if plan.interval_s else None,
+                max_schedule_error_ms if plan.is_paced else None,
             ),
         )
 

@@ -33,6 +33,11 @@ class SamplingPlan:
             raise ValueError(f"interval must not be negative, got {self.interval_s}")
 
     @property
+    def is_paced(self) -> bool:
+        """Unpaced plans schedule every sample at zero, so nothing about them can be judged on schedule."""
+        return self.interval_s > 0
+
+    @property
     def frequency_hz(self) -> Optional[float]:
         return 1 / self.interval_s if self.interval_s else None
 

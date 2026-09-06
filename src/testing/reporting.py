@@ -10,13 +10,14 @@ def format_run(result: RunResult) -> str:
     ammeter, timing, plan = result.ammeter, result.timing, result.plan
     pace = f"{plan.frequency_hz:g} Hz" if plan.frequency_hz else "unpaced"
     label = f"  label: {result.metadata['label']}" if result.metadata.get("label") else ""
-    # An unpaced run schedules every sample at zero, so its "schedule error" is only the elapsed time.
-    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.interval_s else ""
+    # An unpaced run schedules every sample at zero, so both scheduled figures would only be numbers.
+    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.is_paced else ""
+    scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if plan.is_paced else ""
     lines = [
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",
         f"  samples   {len(result.values)}/{len(result.samples)} ok, {pace}, "
-        f"{timing.actual_span_s:.3g} s (scheduled {timing.planned_span_s:.3g} s)",
+        f"{timing.actual_span_s:.3g} s{scheduled}",
         f"  timing    {schedule_error}latency mean {timing.mean_latency_ms:.2f} ms "
         f"/ max {timing.max_latency_ms:.2f} ms",
     ]
