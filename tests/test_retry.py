@@ -1,4 +1,3 @@
-import time
 
 import pytest
 
@@ -70,10 +69,13 @@ def test_a_negative_backoff_is_rejected() -> None:
         Retrying(lambda: 1.0, backoff_s=-0.1)
 
 
-def test_backoff_grows_linearly_with_the_attempt() -> None:
-    """Lower bound only: an upper bound on wall-clock timing is how a suite becomes flaky."""
+def test_backoff_grows_linearly_with_the_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Assert the requested backoffs, not elapsed time: time.sleep undershoots on Windows before 3.11,
+    so two sleeps asking for 30 ms delivered 29.95 ms and a lower bound on the clock failed."""
+    slept: list[float] = []
+    monkeypatch.setattr("src.testing.ammeter.time.sleep", slept.append)
+
     flaky = Flaky(failures=2, error=AmmeterConnectionError("refused"))
-    started = time.perf_counter()
     assert Retrying(flaky, attempts=3, backoff_s=0.01)() == 1.0
-    assert time.perf_counter() - started >= 0.01 + 0.02  # attempt 1 waits 1x, attempt 2 waits 2x
+    assert slept == pytest.approx([0.01, 0.02])  # attempt 1 waits 1x, attempt 2 waits 2x
     assert flaky.calls == 3
