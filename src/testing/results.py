@@ -47,7 +47,7 @@ class RunResult:
         timing = TimingStats.from_samples(samples)
         return cls(
             run_id=f"{started:%Y%m%d_%H%M%S}_{spec.name}_{uuid.uuid4().hex[:8]}",
-            created_at=started.isoformat(timespec="seconds"),
+            created_at=started.isoformat(timespec="milliseconds"),  # concurrent runs share a second
             ammeter=spec,
             plan=plan,
             metadata=metadata,
@@ -55,7 +55,11 @@ class RunResult:
             statistics=stats,
             timing=timing,
             accuracy=AccuracyStats.from_values(values, reference_a) if values and reference_a is not None else None,
-            verdict=evaluate(samples, stats, timing, spec, max_failure_rate, max_schedule_error_ms),
+            # Unpaced sampling schedules every sample at 0, so the "error" would be the run duration.
+            verdict=evaluate(
+                samples, stats, timing, spec, max_failure_rate,
+                max_schedule_error_ms if plan.interval_s else None,
+            ),
         )
 
     @property

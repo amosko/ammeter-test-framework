@@ -22,10 +22,6 @@ class Ammeter:
     def __init__(self, spec: AmmeterSpec):
         self.spec = spec
 
-    @property
-    def name(self) -> str:
-        return self.spec.name
-
     def measure(self) -> float:
         """Take one reading in amperes; raises AmmeterError on failure."""
         return read_current(self.spec.host, self.spec.port, self.spec.command, self.spec.timeout_s)

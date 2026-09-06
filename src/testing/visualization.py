@@ -55,8 +55,14 @@ def plot_comparison(results: Sequence[RunResult], path: Path) -> Optional[Path]:
     ax_box.set_yscale("log")
     ax_box.set(ylabel="current [A]", title="reading distribution (log scale)")
 
-    cv = {r.ammeter.name: r.statistics.cv_percent for r in results if r.statistics and r.statistics.cv_percent}
-    ax_cv.bar(list(cv), list(cv.values()), color="C1")
+    # One bar per run, positional: keying by ammeter name collapsed several runs of one device into one.
+    charted = [
+        (r.ammeter.name, r.statistics.cv_percent)
+        for r in results
+        if r.statistics is not None and r.statistics.cv_percent is not None
+    ]
+    ax_cv.bar(range(len(charted)), [cv for _, cv in charted], color="C1")
+    ax_cv.set_xticks(range(len(charted)), [name for name, _ in charted])
     ax_cv.set(ylabel="CV [%]", title="precision: coefficient of variation (lower is better)")
     fig.suptitle("   ".join(r.run_id for r in results), fontsize=8)
 

@@ -88,12 +88,12 @@ Most consistent (lowest CV): circutor at 46.69%
 
 ## Commands
 
-| Command                         | What it does                                                           |
-|---------------------------------|------------------------------------------------------------------------|
-| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive |
-| `list`                          | Table of archived runs                                                 |
-| `show RUN_ID`                   | Report of one archived run                                             |
-| `compare RUN_ID ... / --latest` | Precision ranking of several runs, plus a comparison plot              |
+| Command                         | What it does                                                                     |
+|---------------------------------|----------------------------------------------------------------------------------|
+| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive           |
+| `list`                          | Table of archived runs                                                           |
+| `show RUN_ID`                   | Report of one archived run                                                       |
+| `compare RUN_ID ... / --latest` | Precision ranking of several runs, plus a comparison plot (`--no-plot` skips it) |
 
 `run` options: `--count N`, `--duration SECONDS`, `--frequency HZ` (any two), `--label TEXT`,
 `--reference AMPERES` (known reference current, enables accuracy metrics), `--simulate-errors RATE` with
@@ -101,7 +101,7 @@ Most consistent (lowest CV): circutor at 46.69%
 Options shared by every command go before the command: `--config PATH`, `--results-dir PATH`, `--verbose`.
 
 Exit code: 0 when every run passed, 1 when a run failed or an ammeter was unreachable, 2 for usage
-and configuration errors.
+and configuration errors, 130 when interrupted.
 
 ## Configuration
 
@@ -157,7 +157,7 @@ reference current.
 
 ## Results
 
-Every run is archived as `results/<run_id>.json` with a matching `<run_id>.png` plot. The run id embeds the
+Every run is archived as `results/<run_id>.json` and, unless plotting is off, a matching `<run_id>.png` plot. The run id embeds the
 start time and the ammeter name plus a random suffix, so ids are unique and sort chronologically:
 `20260906_164010_entes_41918e70`.
 
@@ -194,7 +194,7 @@ On macOS, port 5000 may be taken by AirPlay Receiver; change the port in the con
 main.py                   starts the emulators (config driven) and reads one value from each
 run_tests.py              framework command line entry point
 config/config.yaml        ammeters, sampling, criteria, archive location
-Ammeters/                 the emulators (three lines changed) and the TCP client
+Ammeters/                 the emulators (three small fixes, see docs/DESIGN.md) and the TCP client
 src/testing/
   ammeter.py              unified Ammeter API, Retrying, FaultInjector (error simulation)
   sampling.py             SamplingPlan and scheduled sample collection

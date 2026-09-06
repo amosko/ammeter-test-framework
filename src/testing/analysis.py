@@ -17,7 +17,7 @@ class Statistics:
     stdev: float  # sample standard deviation; 0 for a single value
     minimum: float
     maximum: float
-    cv_percent: Optional[float]  # stdev / mean: unit-free precision, comparable across ammeter types
+    cv_percent: Optional[float]  # 100 * stdev / |mean|: unit free, so comparable across ammeter types
 
     @classmethod
     def from_values(cls, values: Sequence[float]) -> "Statistics":

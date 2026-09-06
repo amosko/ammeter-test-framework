@@ -106,6 +106,11 @@ def _verdict(result: RunResult) -> str:
     return "PASS" if result.verdict.passed else "FAIL"
 
 
+def plural(count: int, noun: str) -> str:
+    """English plural for the generated reports; "1 runs" reads like a bug in the tool."""
+    return noun if count == 1 else f"{noun}s"
+
+
 def _num(value: Optional[float]) -> str:
     return "-" if value is None else f"{value:.4g}"
 

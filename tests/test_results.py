@@ -22,7 +22,7 @@ def make_result(values: list[Optional[float]], started: datetime = datetime(2026
 def test_result_is_built_from_samples() -> None:
     result = make_result([1.0, 3.0])
     assert result.run_id.startswith("20260102_030405_greenlee_")
-    assert result.created_at == "2026-01-02T03:04:05"
+    assert result.created_at == "2026-01-02T03:04:05.000"  # milliseconds: concurrent runs share a second
     assert result.statistics is not None and result.statistics.mean == 2.0
     assert result.accuracy is not None and result.accuracy.bias_a == 0.0
     assert result.verdict.passed
@@ -56,6 +56,17 @@ def test_archive_lists_runs_oldest_first(tmp_path: Path) -> None:
     archive.save(older)
     assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]
     assert archive.latest_per_ammeter() == [newer]
+
+
+def test_runs_in_the_same_second_still_order_by_start_time(tmp_path: Path) -> None:
+    """A concurrent run archives all three ammeters inside one second, so whole-second ids tie."""
+    archive = ResultsArchive(tmp_path)
+    first = make_result([1.0], datetime(2026, 1, 2, 3, 4, 5, 100_000))
+    second = make_result([1.0], datetime(2026, 1, 2, 3, 4, 5, 900_000))
+    archive.save(second)
+    archive.save(first)
+    assert [r.run_id for r in archive.load_all()] == [first.run_id, second.run_id]
+    assert archive.latest_per_ammeter() == [second]
 
 
 def test_archive_sorts_by_time_not_by_string(tmp_path: Path) -> None:

@@ -15,7 +15,7 @@ from src.testing.reporting import format_run  # noqa: E402
 from src.utils.config import Config  # noqa: E402
 
 config = Config.load(ROOT / "config" / "config.yaml")
-config = dataclasses.replace(config, sample_count=20, frequency_hz=20, results_dir=ROOT / "results")
+config = dataclasses.replace(config, sample_count=20, frequency_hz=20, results_dir=ROOT / "examples" / "results")
 
 framework = AmmeterTestFramework(config)
 result = framework.run_test("greenlee", label="library example")

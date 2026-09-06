@@ -87,6 +87,18 @@ def test_an_unreachable_ammeter_fails_before_any_sampling_starts(config: Config)
     assert not config.results_dir.exists()
 
 
+def test_unpaced_sampling_is_not_judged_against_the_schedule(config: Config) -> None:
+    """Every unpaced sample is scheduled at 0, so the "error" would be the run duration and always fail."""
+    config = dataclasses.replace(
+        config, sample_count=60, frequency_hz=None, duration_s=None, max_schedule_error_ms=10
+    )
+    result = AmmeterTestFramework(config).run_test("greenlee")
+
+    assert result.plan.interval_s == 0
+    assert result.timing.max_schedule_error_ms > 10  # the raw number is the elapsed time, not an error
+    assert result.verdict.passed, result.verdict.reasons
+
+
 def test_unknown_ammeter(config: Config) -> None:
     with pytest.raises(ConfigError, match="unknown ammeter"):
         AmmeterTestFramework(config).run_test("fluke")

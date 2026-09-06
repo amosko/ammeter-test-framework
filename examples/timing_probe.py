@@ -1,4 +1,4 @@
-"""Reproduce the timing table in docs/DESIGN.md: schedule error of the framework's wait against a single sleep.
+"""Measure the framework's wait against a single sleep: rows 2 and 3 of the timing table in docs/DESIGN.md.
 
 Run: python examples/timing_probe.py [frequency_hz] [count]
 """

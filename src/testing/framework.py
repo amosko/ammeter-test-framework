@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from src.testing.ammeter import Ammeter, FaultInjector, Measure, Retrying
+from src.testing.reporting import plural
 from src.testing.results import ResultsArchive, RunResult
 from src.testing.sampling import SamplingPlan, collect_samples
 from src.utils.config import AmmeterSpec, Config, ConfigError
@@ -52,7 +53,7 @@ class AmmeterTestFramework:
             measure = FaultInjector(measure, self.config.simulated_failure_rate, self.config.simulation_seed)
 
         pace = f"at {plan.frequency_hz:g} Hz" if plan.frequency_hz else "as fast as possible"
-        logger.info("%s: taking %d samples %s", spec.name, plan.count, pace)
+        logger.info("%s: taking %d %s %s", spec.name, plan.count, plural(plan.count, "sample"), pace)
         started = datetime.now().astimezone()
         samples = collect_samples(measure, plan, spec.name, self._cancelled)
 
@@ -85,10 +86,11 @@ class AmmeterTestFramework:
 
     def run_selected(self, names: Sequence[str], label: Optional[str] = None) -> list[RunResult]:
         """Sample the named ammeters over the same window, one worker each. Results follow the order given."""
+        if len(names) < 2:
+            return [self.run_test(name, label) for name in names]  # run_test does its own pre-check
         for name in names:
             self.make_measure(self.config.ammeter(name))()  # unknown or unreachable: fail before the pool
-        if len(names) < 2:
-            return [self.run_test(name, label) for name in names]
+        self._cancelled.clear()  # a framework reused after a Ctrl+C must not cancel its next run
         pool = ThreadPoolExecutor(max_workers=len(names), thread_name_prefix="ammeter")
         try:
             futures = [pool.submit(self.run_test, name, label) for name in names]

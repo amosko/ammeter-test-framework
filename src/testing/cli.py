@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 from Ammeters.client import AmmeterConnectionError, AmmeterError, is_listening
 from src.testing.framework import AmmeterTestFramework
-from src.testing.reporting import format_comparison, format_listing, format_run
+from src.testing.reporting import format_comparison, format_listing, format_run, plural
 from src.testing.results import RunResult
 from src.testing.visualization import plot_comparison, plot_run
 from src.utils.config import DEFAULT_CONFIG_PATH, AmmeterSpec, Config, ConfigError
@@ -163,7 +163,7 @@ def _sampling_hint(args: argparse.Namespace) -> str:
 
 
 def _print_comparison(results: Sequence[RunResult], framework: AmmeterTestFramework, plot: bool) -> None:
-    print(f"Comparison of {len(results)} runs")
+    print(f"Comparison of {len(results)} {plural(len(results), 'run')}")
     print(format_comparison(results))
     if plot:
         path = framework.archive.path_for(f"{datetime.now():%Y%m%d_%H%M%S}_comparison", ".png")
