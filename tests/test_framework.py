@@ -53,10 +53,14 @@ def test_run_all_samples_the_ammeters_over_the_same_window(config: Config) -> No
     assert elapsed < sum(r.timing.actual_span_s for r in results)
 
 
-def test_every_ammeter_gets_its_own_worker(config: Config) -> None:
+def test_sampling_leaves_the_calling_thread_for_the_pool(config: Config) -> None:
+    """The pool is sized to the ammeters but reuses an idle worker if one finishes first, so the guarantee
+    is that nothing is sampled on the calling thread. Whether the runs overlap is the timing test above."""
     threads: dict[str, str] = {}
     recording_framework(config, threads).run_all()
-    assert len(set(threads.values())) == 3
+
+    assert set(threads) == set(config.ammeters)
+    assert threading.main_thread().name not in threads.values()
     assert all(name.startswith("ammeter") for name in threads.values())
 
 
