@@ -5,6 +5,7 @@ import threading
 
 import pytest
 
+from Ammeters.base_ammeter import AmmeterEmulatorBase
 from Ammeters.client import AmmeterProtocolError, read_current, wait_for_ammeter
 from main import EMULATORS
 from src.utils.config import DEFAULT_CONFIG_PATH, Config
@@ -59,22 +60,30 @@ def test_a_client_that_vanishes_does_not_kill_the_server() -> None:
     assert read_current("127.0.0.1", port, command) > 0  # still serving
 
 
+class FlakyAmmeter(AmmeterEmulatorBase):
+    """An emulator whose first measurement raises, like the Greenlee omega did on Windows."""
+
+    def __init__(self, port: int) -> None:
+        super().__init__(port)
+        self.broken = True
+
+    @property
+    def get_current_command(self) -> bytes:
+        return b"MEASURE"
+
+    def measure_current(self) -> float:
+        if self.broken:
+            self.broken = False
+            raise ZeroDivisionError("a bug in the measurement")
+        return 1.5
+
+
 def test_a_failing_measurement_does_not_kill_the_server() -> None:
-    """The Greenlee omega killed the thread this way; catching only OSError would leave that class open."""
-    broken = {"first": True}
-
-    class Flaky(EMULATORS["greenlee"]):  # type: ignore[misc, valid-type]
-        def measure_current(self) -> float:
-            if broken["first"]:
-                broken["first"] = False
-                raise ZeroDivisionError("a bug in the measurement")
-            return 1.5
-
+    """The Greenlee omega killed the serving thread this way, so OSError alone leaves the class open."""
     port = free_port()
-    threading.Thread(target=Flaky(port).start_server, daemon=True).start()
+    threading.Thread(target=FlakyAmmeter(port).start_server, daemon=True).start()
     wait_for_ammeter("127.0.0.1", port)
-    command = Config.load(DEFAULT_CONFIG_PATH).ammeter("greenlee").command
 
     with pytest.raises(AmmeterProtocolError):
-        read_current("127.0.0.1", port, command)
-    assert read_current("127.0.0.1", port, command) == 1.5  # the thread survived the bug
+        read_current("127.0.0.1", port, "MEASURE")
+    assert read_current("127.0.0.1", port, "MEASURE") == 1.5  # the thread survived the bug
