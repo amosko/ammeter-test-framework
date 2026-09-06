@@ -1,5 +1,18 @@
 # Design notes
 
+## Contents
+
+- [Architecture](#architecture)
+  - [Concurrency](#concurrency)
+- [Decisions](#decisions)
+- [Accuracy assessment](#accuracy-assessment)
+- [Testing the framework](#testing-the-framework)
+- [Fixes to the original code](#fixes-to-the-original-code)
+- [Libraries installed](#libraries-installed)
+- [Cross-platform notes](#cross-platform-notes)
+- [Extending](#extending)
+- [Not done, on purpose](#not-done-on-purpose)
+
 ## Architecture
 
 The framework is a pipeline of small modules, each with one job, so any of them can be replaced or reused

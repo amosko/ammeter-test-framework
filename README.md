@@ -7,6 +7,17 @@ and compares ammeters against each other.
 Each emulator is a small TCP server: send its command, get one current reading back as text.
 The framework treats the emulators as the devices under test and never imports their internals.
 
+## Contents
+
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Configuration](#configuration)
+- [Results](#results)
+- [The emulators](#the-emulators)
+- [Project structure](#project-structure)
+- [Development](#development)
+
 ## Requirements
 
 Python 3.9 or newer and two packages:
