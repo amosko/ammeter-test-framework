@@ -6,7 +6,11 @@ from typing import Any, Union
 import pytest
 
 from Ammeters.client import AmmeterError
+from src.testing.analysis import TimingStats, evaluate
 from src.testing.sampling import SamplingPlan, collect_samples
+from src.utils.config import AmmeterSpec
+
+SPEC = AmmeterSpec("greenlee", "127.0.0.1", 5000, "CMD")
 
 
 def test_count_and_frequency_derive_interval() -> None:
@@ -81,7 +85,8 @@ def test_samples_follow_the_schedule() -> None:
 
     # The check above is invariant to a uniform shift by construction, which is what makes it
     # host-independent and also what makes it blind: without this, a sampler late on every sample passes.
-    # Five intervals is 4x the worst a macOS runner has produced here and well under any real lateness.
+    # Five intervals only bounds gross lateness -- it tolerates up to 49 ms, which is five times the
+    # shipped criterion. The criterion itself is pinned deterministically below and in test_analysis.py.
     assert statistics.median(deviations) < 5 * plan.interval_s
 
 
@@ -129,3 +134,32 @@ def test_the_cancellation_message_pluralises() -> None:
 
     with pytest.raises(KeyboardInterrupt, match=r"cancelled after 1 sample$"):
         collect_samples(measure, SamplingPlan(count=5, interval_s=0), "greenlee", cancelled)
+
+
+def test_the_sampler_sleeps_toward_the_deadline_rather_than_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The halving wait is what earns the sub-millisecond schedule error in DESIGN.md's timing table: one
+    sleep for the whole remainder inherits the platform's oversleep, which is why the table shows 8.1 ms."""
+    requested: list[float] = []
+    real_sleep = time.sleep
+
+    def recording_sleep(seconds: float) -> None:
+        requested.append(seconds)
+        real_sleep(seconds)
+
+    monkeypatch.setattr("src.testing.sampling.time.sleep", recording_sleep)
+
+    collect_samples(lambda: 1.0, SamplingPlan(count=3, interval_s=0.05), "greenlee")
+    assert len(requested) > 3  # several converging sleeps per sample, not one per deadline
+    assert max(requested) < 0.05  # and none of them the whole remaining interval
+
+
+def test_a_late_sample_fails_the_shipped_criterion(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deterministic, unlike the statistical bound above: no test configuration enables the criterion, so
+    without this the 10 ms the config ships is only ever exercised on synthetic samples."""
+    monkeypatch.setattr("src.testing.sampling._wait_until", lambda deadline: None)  # every sample fires at once
+    plan = SamplingPlan(count=5, interval_s=0.01)
+    samples = collect_samples(lambda: 1.0, plan, "greenlee")
+
+    timing = TimingStats.from_samples(samples)
+    verdict = evaluate(samples, None, timing, SPEC, max_failure_rate=0.0, max_schedule_error_ms=10.0)
+    assert not verdict.passed and "exceeds the 10 ms limit" in verdict.reasons[0]

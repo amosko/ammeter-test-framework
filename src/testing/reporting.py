@@ -11,8 +11,8 @@ def format_run(result: RunResult) -> str:
     pace = f"{plan.frequency_hz:g} Hz" if plan.frequency_hz else "unpaced"
     label = f"  label: {result.metadata['label']}" if result.metadata.get("label") else ""
     # An unpaced run schedules every sample at zero, so both scheduled figures would only be numbers.
-    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if timing.planned_span_s else ""
-    scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if timing.planned_span_s else ""
+    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.has_schedule else ""
+    scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if plan.has_schedule else ""
     lines = [
         f"Run {result.run_id}  [{_verdict(result)}]",
         f"  ammeter   {ammeter.name} @ {ammeter.host}:{ammeter.port}{label}",
@@ -90,11 +90,17 @@ def format_comparison(results: Sequence[RunResult]) -> str:
     best = ranked[0]
     if best.statistics is not None and best.statistics.cv_percent is not None:
         lines.append(f"Most consistent (lowest CV): {best.ammeter.name} at {_num(best.statistics.cv_percent)}%")
-    reliable = min(ranked, key=lambda r: (r.failure_rate, _cv_key(r)))
-    lines.append(
-        f"Most reliable (fewest failed samples): {reliable.ammeter.name} "
-        f"at {reliable.failed_count}/{len(reliable.samples)}"
-    )
+    lowest = min(r.failure_rate for r in results)
+    if lowest < 1.0:  # nothing measured anything, so nothing is more reliable than anything else
+        tied = [r for r in results if r.failure_rate == lowest]
+        rate = f"{lowest:.0%} failed"
+        if len(tied) > 1:
+            lines.append(f"Most reliable (lowest failure rate): {len(tied)} runs tied at {rate}")
+        else:
+            failed, total = tied[0].failed_count, len(tied[0].samples)
+            lines.append(
+                f"Most reliable (lowest failure rate): {tied[0].ammeter.name} at {rate} ({failed}/{total})"
+            )
     if with_accuracy:
         accurate = min(results, key=lambda r: r.accuracy.mean_abs_error_percent if r.accuracy else float("inf"))
         if accurate.accuracy is not None:

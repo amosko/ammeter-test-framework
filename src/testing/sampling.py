@@ -34,8 +34,13 @@ class SamplingPlan:
 
     @property
     def is_paced(self) -> bool:
-        """Unpaced plans schedule every sample at zero, so nothing about them can be judged on schedule."""
         return self.interval_s > 0
+
+    @property
+    def has_schedule(self) -> bool:
+        """Whether there is a schedule to be late against: an unpaced plan puts every sample at zero, and
+        a single sample is its own start. One predicate, so the verdict and the report cannot disagree."""
+        return self.is_paced and self.count > 1
 
     @property
     def frequency_hz(self) -> Optional[float]:

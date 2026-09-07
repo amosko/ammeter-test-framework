@@ -116,6 +116,9 @@ def test_usage_errors(cli: Callable[..., int], capsys: pytest.CaptureFixture[str
     err = capsys.readouterr().err
     assert "give only two" in err and "--duration was combined with the config" in err
 
+    assert cli("run", "--duration", "0", "--frequency", "20", "--no-plot") == 2  # two flags, zero is one
+    assert "was combined with the config" not in capsys.readouterr().err
+
     assert cli("show", "missing_run") == 2
     assert "no run 'missing_run'" in capsys.readouterr().err
 

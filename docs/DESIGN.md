@@ -49,11 +49,12 @@ after every worker has finished: `pyplot` is a global state machine and is not t
 reaches only the main thread, so Ctrl+C sets an event the samplers check; a cancelled run raises before
 it reaches the archive, because a cancelled run is not a result.
 
-`_wait_until` busy-spins for the last `SPIN_WINDOW_S` (2 ms off Windows), and a spinning thread holds
-the GIL for a whole switch interval at a time, so workers whose deadlines coincide contend. A worker spins only until its own deadline and then
-blocks on the socket, which bounds the worst case at (N − 1) × `SPIN_WINDOW_S`: 4 ms for three ammeters
-where that window is 2 ms, inside the 10 ms criterion. The window is ten times larger on Windows, which
-changes the arithmetic — see cross-platform notes. Measured on macOS 26 / Python 3.9 with the shipped
+`_wait_until` busy-spins for the last `SPIN_WINDOW_S` (2 ms off Windows), and a spinning thread
+holds the GIL for a whole switch interval at a time, so workers whose deadlines coincide contend. A
+worker spins only until its own deadline and then blocks on the socket, which bounds the worst case at
+(N − 1) × `SPIN_WINDOW_S`: 4 ms for three ammeters where that window is 2 ms, inside the 10 ms
+criterion. The window is ten times larger on Windows, which changes the arithmetic — see cross-platform
+notes. Measured on macOS 26 / Python 3.9 with the shipped
 config, fresh process per run:
 
 | Sampling                    | Max schedule error | Runs |
@@ -179,7 +180,7 @@ are pinned the same way, against 200 readings from each emulator.
 | `Ammeters/base_ammeter.py` | Restarting failed with "Address already in use" while old connections were in TIME_WAIT (the reason for the "increase sleep time" comment) | `SO_REUSEADDR` on POSIX; on Windows the flag would let two servers bind one port. Three lines changed |
 | `Ammeters/base_ammeter.py` | `random.seed(time.time())` in `__init__` reseeded the *global* RNG all three emulators draw from, so devices constructed in the same millisecond could share a stream | Removed; CPython seeds `random` from `os.urandom` at import. An injectable seed would still write to the global module; reproducibility is available via `make_measure` or `FaultInjector(seed=...)` |
 | `Ammeters/Greenlee_Ammeter.py` | The reading was printed with a Greek capital omega for ohms, which the default Windows console encoding (cp1252) cannot encode, so `measure_current` raised `UnicodeEncodeError` after matching the command but before replying. Every request on Windows hung until the client's timeout; found by CI, not by reading | Prints `ohm`. One string, no change to the measurement |
-| `config/config.yaml` | Ammeters were addressed as `localhost`, but the emulators bind an `AF_INET` socket and serve `127.0.0.1` only. On Windows `localhost` resolves to `::1` first, so every request burned its full two-second timeout on IPv6 before falling back; a five-sample run took 10 s | The config names the address the device actually serves, as it already does for the CIRCUTOR command |
+| `config/config.yaml` | Also this solution's own, not an original defect: the original file had the whole `ammeters:` block commented out and no `host` key. This solution added `host: localhost`, but the emulators bind an `AF_INET` socket and serve `127.0.0.1` only. On Windows `localhost` resolves to `::1` first, so every request burned its full timeout on IPv6 before falling back; a five-sample run took 10 s | The config names the address the device actually serves. Found by the Windows CI job |
 | `Ammeters/client.py` | Not an original defect but recorded for honesty: this solution's own first transport rewrite put connecting and reading in one `try`, so a connect that timed out became `AmmeterTimeoutError`. POSIX refuses a dead port and Windows drops it, so one fault had two types depending on the platform, and only one of them earned the CLI's "start the emulators" hint | Connect failures are connection errors whether refused or timed out; only a connected but silent device is a timeout. Found by the Windows CI job, not by reading |
 | `Ammeters/base_ammeter.py` | An unhandled `ConnectionResetError` in the accept loop ended the serving thread, so one client that vanished took the ammeter offline for the rest of the run. `is_listening` connects and closes immediately, and Windows answers a close on a backlogged connection with an RST where POSIX sends FIN, so `--start-emulators` failed there intermittently | The per-connection block catches `Exception` and keeps serving, which also covers a `measure_current` that raises -- the Greenlee omega above, handled structurally rather than at the string. Reproducible on any platform with `SO_LINGER 0`, which is what the test uses |
 | `Ammeters/client.py` | No timeout, so a silent device hangs forever; printed instead of returning the value; a single `recv` could return a truncated number | Timeout, typed errors, reads until the emulator closes, returns the float |
@@ -209,8 +210,9 @@ host. Every commit runs the suite, ruff and mypy on ubuntu, macOS and Windows ag
 (`.github/workflows/ci.yml`).
 
 That matrix was added because "ensure cross-platform compatibility" is a requirement and nothing here had
-ever run on Windows. It found three real defects that reading the code had not: the omega in the Greenlee
-print, the IPv6 detour below, and a connect timeout being reported as a reply timeout. None of them were
+ever run on Windows. It found three defects that reading the code had not: one original, the omega in the
+Greenlee print, and two this solution had introduced itself -- the IPv6 detour below and a connect
+timeout reported as a reply timeout. None of them were
 in the sockets-and-paths places one thinks to look.
 
 Two things still differ by design:

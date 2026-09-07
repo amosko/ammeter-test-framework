@@ -64,7 +64,7 @@ class AmmeterTestFramework:
             "platform": platform.platform(),
             "simulated_failure_rate": self.config.simulated_failure_rate,
             "max_failure_rate": self.config.max_failure_rate,
-            "max_schedule_error_ms": self.config.max_schedule_error_ms if plan.is_paced else None,
+            "max_schedule_error_ms": self.config.max_schedule_error_ms if plan.has_schedule else None,
             "retry_attempts": self.config.retry_attempts,
             "retry_backoff_s": self.config.retry_backoff_s,
         }

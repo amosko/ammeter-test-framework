@@ -1,3 +1,4 @@
+import ipaddress
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,14 @@ def test_shipped_config_commands_match_the_emulator_definitions() -> None:
         assert spec.command.encode() == emulator_class(spec.port).get_current_command, (
             f"config command for {name} does not match {emulator_class.__name__}"
         )
+
+
+def test_shipped_config_addresses_the_emulators_by_ip() -> None:
+    """The emulators bind an AF_INET socket; a hostname resolves to ::1 first on Windows and every
+    request then burns its whole timeout on IPv6 before falling back."""
+    config = Config.load(DEFAULT_CONFIG_PATH)
+    for spec in config.ammeters.values():
+        assert ipaddress.ip_address(spec.host).version == 4, f"{spec.name} is addressed by name"
 
 
 def test_minimal_config_uses_defaults() -> None:

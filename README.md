@@ -89,12 +89,12 @@ Most reliable (fewest failed samples): circutor at 0/50
 
 ## Commands
 
-| Command                         | What it does                                                                     |
-|---------------------------------|----------------------------------------------------------------------------------|
-| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive           |
-| `list`                          | Table of archived runs                                                           |
-| `show RUN_ID`                   | Report of one archived run                                                       |
-| `compare RUN_ID ... / --latest` | Precision ranking of several runs, plus a comparison plot (`--no-plot` skips it) |
+| Command                         | What it does                                                           |
+|---------------------------------|------------------------------------------------------------------------|
+| `run [AMMETER ...]`             | Sample the named ammeters (default: all) concurrently, report, archive |
+| `list`                          | Table of archived runs                                                 |
+| `show RUN_ID`                   | Report of one archived run                                             |
+| `compare RUN_ID ... / --latest` | Ranks several runs by precision, reliability and accuracy, plus a plot |
 
 `run` options: `--count N`, `--duration SECONDS`, `--frequency HZ` (any two), `--label TEXT`,
 `--reference AMPERES` (known reference current, enables accuracy metrics), `--simulate-errors RATE` with
@@ -217,7 +217,7 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 
 ```sh
 python3 -m pip install -r requirements-dev.txt
-python3 -m pytest            # 150 tests, about 6 seconds; starts emulators on free ports by itself
+python3 -m pytest            # 157 tests, about 6 seconds; starts emulators on free ports by itself
 python3 -m ruff check .
 python3 -m mypy main.py run_tests.py Ammeters src tests examples   # run on 3.9, the version it targets
 ```

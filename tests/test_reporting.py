@@ -97,7 +97,8 @@ def test_several_runs_of_one_ammeter_are_several_bars() -> None:
 def test_a_single_sample_report_omits_the_empty_scheduled_span() -> None:
     """One paced sample is scheduled at zero, so "(scheduled 0 s)" is a number rather than information."""
     result = make_result("greenlee", [1.0])
-    assert "(scheduled" not in format_run(result)
+    report = format_run(result)
+    assert "(scheduled" not in report and "max schedule error" not in report
 
 
 def test_plots_are_skipped_when_matplotlib_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,5 +127,31 @@ def test_comparison_names_the_most_reliable_ammeter() -> None:
     """The specification asks to identify the most reliable method; CV and accuracy do not measure that."""
     flaky = make_result("greenlee", [1.0, None, None])
     solid = make_result("entes", [5.0, None, 7.0])
-    report = format_comparison([flaky, solid])
-    assert "Most reliable (fewest failed samples): entes at 1/3" in report
+    assert "Most reliable (lowest failure rate): entes at 33% failed (1/3)" in format_comparison([flaky, solid])
+
+
+def test_reliability_ranks_by_rate_not_by_count() -> None:
+    """3 failures in 100 is a better device than 2 in 10, so the count alone would name the wrong one."""
+    few_samples = make_result("entes", [1.0] * 8 + [None, None])
+    many_samples = make_result("greenlee", [1.0] * 97 + [None, None, None])
+    assert "greenlee at 3% failed (3/100)" in format_comparison([few_samples, many_samples])
+
+
+def test_reliability_reports_a_tie_as_a_tie() -> None:
+    """Every clean run is 0 failed, so a single winner there would be decided by the sort, not the data."""
+    runs = [make_result(name, [1.0, 2.0]) for name in ("greenlee", "entes", "circutor")]
+    assert "Most reliable (lowest failure rate): 3 runs tied at 0% failed" in format_comparison(runs)
+
+
+def test_reliability_is_not_claimed_when_every_run_failed_everything() -> None:
+    runs = [make_result("greenlee", [None, None]), make_result("entes", [None, None])]
+    assert "Most reliable" not in format_comparison(runs)
+
+
+def test_a_run_with_no_statistics_ranks_last_not_first() -> None:
+    """cv_percent is None when every sample failed; sorting it as 0 would call it the most consistent."""
+    failed = make_result("greenlee", [None, None])
+    measured = make_result("entes", [1.0, 2.0])
+    table = format_comparison([failed, measured])
+    assert table.index("entes") < table.index("greenlee")
+    assert "Most consistent (lowest CV): entes" in table

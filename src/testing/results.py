@@ -57,7 +57,7 @@ class RunResult:
             accuracy=AccuracyStats.from_values(values, reference_a) if values and reference_a is not None else None,
             verdict=evaluate(
                 samples, stats, timing, spec, max_failure_rate,
-                max_schedule_error_ms if plan.is_paced else None,
+                max_schedule_error_ms if plan.has_schedule else None,
             ),
         )
 
