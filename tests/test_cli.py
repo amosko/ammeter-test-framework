@@ -224,7 +224,7 @@ def test_an_interrupt_exits_130(cli: Callable[..., int], monkeypatch: pytest.Mon
 
 
 class _StubbornProcess:
-    """A main.py that ignores SIGTERM: every wait() with a timeout expires."""
+    """A main.py that ignores SIGTERM and never reaps: every bounded wait() expires."""
 
     def __init__(self) -> None:
         self.killed = False
@@ -237,9 +237,9 @@ class _StubbornProcess:
         self.killed = True
 
     def wait(self, timeout: Optional[float] = None) -> int:
-        if timeout is not None:
-            raise subprocess.TimeoutExpired("main.py", timeout)
-        return -9
+        if timeout is None:  # it never reaps either: an unbounded wait here would hang the caller for ever
+            raise AssertionError("every wait() in the cleanup path must be bounded")
+        raise subprocess.TimeoutExpired("main.py", timeout)
 
 
 def test_a_stubborn_emulator_is_killed_without_masking_the_error(

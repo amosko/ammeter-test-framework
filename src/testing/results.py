@@ -94,7 +94,11 @@ class RunResult:
 
 def _created_at(result: RunResult) -> datetime:
     """Sort key for archived runs; a naive stamp is read as UTC so a mixed archive still orders."""
-    stamp = datetime.fromisoformat(result.created_at)
+    try:
+        # Python 3.9's fromisoformat reads back only what isoformat writes, and 'Z' is not part of that.
+        stamp = datetime.fromisoformat(result.created_at.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError(f"run {result.run_id} has an unsortable created_at {result.created_at!r}") from None
     return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 
 
@@ -125,9 +129,7 @@ class ResultsArchive:
         if not path.is_file():
             raise FileNotFoundError(f"no run '{run_id}' in {self.directory}")
         try:
-            result = RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
-            _created_at(result)  # an unparseable stamp is corruption too, not a crash at sort time
-            return result
+            return RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
         except (ValueError, KeyError, TypeError, ConfigError) as exc:
             raise ValueError(f"{path} is not a valid run file: {exc}") from None
 
@@ -136,7 +138,9 @@ class ResultsArchive:
         results = []
         for path in self.directory.glob("*.json"):
             try:
-                results.append(self.load(path.stem))
+                result = self.load(path.stem)
+                _created_at(result)  # unsortable keeps it out of the listing, not out of show
+                results.append(result)
             except ValueError as exc:
                 logger.warning("skipping %s", exc)
         return sorted(results, key=_created_at)

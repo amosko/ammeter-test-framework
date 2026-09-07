@@ -142,7 +142,7 @@ def test_an_unparseable_timestamp_is_skipped_like_any_other_corruption(
 
     with caplog.at_level(logging.WARNING):
         assert archive.load_all() == [good]
-    assert "is not a valid run file" in caplog.text
+    assert "unsortable created_at" in caplog.text
 
 
 def test_a_naive_stamp_still_orders_against_an_aware_one(tmp_path: Path) -> None:
@@ -154,3 +154,30 @@ def test_a_naive_stamp_still_orders_against_an_aware_one(tmp_path: Path) -> None
     archive.save(aware)
 
     assert [r.run_id for r in archive.load_all()] == [naive.run_id, aware.run_id]
+
+
+def test_a_run_whose_stamp_cannot_be_sorted_is_still_readable_on_its_own(tmp_path: Path) -> None:
+    """Only ordering parses created_at, so reading one run by id must not care that it is unsortable."""
+    archive = ResultsArchive(tmp_path)
+    result = make_result([1.0])
+    archive.save(result)
+    path = archive.path_for(result.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "the third of never"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert archive.load(result.run_id).created_at == "the third of never"
+
+
+def test_the_z_suffix_sorts_even_though_3_9_cannot_parse_it(tmp_path: Path) -> None:
+    """'...05Z' is valid ISO 8601 but not what isoformat writes, so 3.9 rejects it; it must still order."""
+    archive = ResultsArchive(tmp_path)
+    older, newer = make_result([1.0], datetime(2000, 1, 1)), make_result([2.0])
+    archive.save(older)
+    archive.save(newer)
+    path = archive.path_for(newer.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "2026-01-02T03:04:05Z"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]

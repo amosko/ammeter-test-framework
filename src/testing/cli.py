@@ -196,7 +196,8 @@ def _emulators(config: Config, config_path: Path, names: Sequence[str]) -> Itera
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:  # never let cleanup replace the error that got us here
             process.kill()
-            process.wait()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                process.wait(timeout=5)  # killed but unreapable must not hang the caller either
         finally:
             if process.stderr:
                 process.stderr.close()
