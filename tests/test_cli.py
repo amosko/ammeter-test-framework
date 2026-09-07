@@ -1,12 +1,18 @@
+import dataclasses
+import io
+import subprocess
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
+from src.testing import cli as cli_module
 from src.testing.cli import main
 from src.testing.results import ResultsArchive, RunResult
 from src.testing.sampling import SamplingPlan
+from src.utils.config import Config
 from tests.helpers import free_port
 
 CONFIG_TEMPLATE = """
@@ -215,3 +221,40 @@ def test_an_interrupt_exits_130(cli: Callable[..., int], monkeypatch: pytest.Mon
 
     monkeypatch.setattr("src.testing.cli.AmmeterTestFramework.run_selected", interrupted)
     assert cli("run", "greenlee", "--no-plot") == 130
+
+
+class _StubbornProcess:
+    """A main.py that ignores SIGTERM: every wait() with a timeout expires."""
+
+    def __init__(self) -> None:
+        self.killed = False
+        self.stderr = io.StringIO()
+
+    def terminate(self) -> None:
+        pass
+
+    def kill(self) -> None:
+        self.killed = True
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        if timeout is not None:
+            raise subprocess.TimeoutExpired("main.py", timeout)
+        return -9
+
+
+def test_a_stubborn_emulator_is_killed_without_masking_the_error(
+    config: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cleanup that raises would replace the caller's exception and leave the child holding the ports."""
+    process = _StubbornProcess()
+    spec = dataclasses.replace(config.ammeter("greenlee"), port=free_port())  # free: the pre-check must pass
+    config = dataclasses.replace(config, ammeters={"greenlee": spec})
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)  # cli.py holds this module
+    monkeypatch.setattr(cli_module, "_wait_for_emulator", lambda process, spec: None)
+
+    emulators = cli_module._emulators(config, tmp_path / "config.yaml", ["greenlee"])
+    with pytest.raises(RuntimeError, match="the run failed"), emulators:
+        raise RuntimeError("the run failed")
+
+    assert process.killed  # otherwise it goes on serving the ports the next run needs
+    assert process.stderr.closed
