@@ -27,7 +27,10 @@ def start_emulators(config: Config) -> list[AmmeterSpec]:
         raise AmmeterError(f"none of the configured ammeters has an emulator (known: {', '.join(EMULATORS)})")
     for spec in specs:
         if is_listening(spec.host, spec.port):
-            raise AmmeterError(f"port {spec.port} is already in use; is another main.py running?")
+            raise AmmeterError(
+                f"port {spec.port} is already in use; stop the other main.py or give '{spec.name}' a free "
+                "port in the config (on macOS, port 5000 is AirPlay Receiver unless it is turned off)"
+            )
         threading.Thread(target=EMULATORS[spec.name](spec.port).start_server, daemon=True).start()
         wait_for_ammeter(spec.host, spec.port)
     return specs

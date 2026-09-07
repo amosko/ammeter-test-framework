@@ -46,6 +46,9 @@ reads one value from each as a smoke test and keeps serving until Ctrl+C:
 python3 main.py
 ```
 
+On macOS, `port 5000 is already in use` means AirPlay Receiver holds it (System Settings > General >
+AirDrop & Handoff); turn it off, or give `greenlee` another port in `config/config.yaml`.
+
 Run the framework in a second terminal:
 
 ```sh

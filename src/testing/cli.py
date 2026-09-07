@@ -183,7 +183,10 @@ def _emulators(config: Config, config_path: Path, names: Sequence[str]) -> Itera
     """Run main.py in the background until the block ends; its stdout is discarded, its stderr reported."""
     for spec in (config.ammeter(name) for name in names):
         if is_listening(spec.host, spec.port):
-            raise AmmeterError(f"{spec.host}:{spec.port} is already served; drop --start-emulators to use it")
+            raise AmmeterError(
+                f"{spec.host}:{spec.port} is already served; drop --start-emulators to use it, or give "
+                f"'{spec.name}' a free port in the config (on macOS, port 5000 is AirPlay Receiver)"
+            )
     command = [sys.executable, str(ROOT / "main.py"), "--config", str(config_path.resolve())]
     process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     try:
