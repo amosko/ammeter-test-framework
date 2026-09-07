@@ -1,0 +1,201 @@
+import json
+import logging
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+
+import pytest
+
+from src.testing.results import ResultsArchive, RunResult
+from src.testing.sampling import Sample, SamplingPlan
+from src.utils.config import AmmeterSpec
+
+SPEC = AmmeterSpec("greenlee", "localhost", 5000, "CMD", expected_min_a=0.0, expected_max_a=10.0)
+PLAN = SamplingPlan(count=2, interval_s=0.5)
+
+
+def make_result(values: list[Optional[float]], started: datetime = datetime(2026, 1, 2, 3, 4, 5)) -> RunResult:
+    samples = [Sample(i, i * 0.5, i * 0.5, 1.0, v, None if v is not None else "boom") for i, v in enumerate(values)]
+    return RunResult.from_samples(SPEC, PLAN, samples, started, {"label": "unit"}, 0.0, reference_a=2.0)
+
+
+def test_result_is_built_from_samples() -> None:
+    result = make_result([1.0, 3.0])
+    assert result.run_id.startswith("20260102_030405_greenlee_")
+    assert result.created_at == "2026-01-02T03:04:05.000"  # milliseconds: concurrent runs share a second
+    assert result.statistics is not None and result.statistics.mean == 2.0
+    assert result.accuracy is not None and result.accuracy.bias_a == 0.0
+    assert result.verdict.passed
+    assert result.values == [1.0, 3.0]
+
+
+def test_all_failed_samples_give_no_statistics() -> None:
+    result = make_result([None, None])
+    assert result.statistics is None and result.accuracy is None
+    assert result.failure_rate == 1.0
+    assert not result.verdict.passed
+
+
+def test_run_ids_are_unique() -> None:
+    assert make_result([1.0]).run_id != make_result([1.0]).run_id
+
+
+def test_archive_round_trip(tmp_path: Path) -> None:
+    archive = ResultsArchive(tmp_path / "results")
+    for result in (make_result([1.0, 3.0]), make_result([None, None])):
+        path = archive.save(result)
+        assert path == tmp_path / "results" / f"{result.run_id}.json"
+        assert archive.load(result.run_id) == result
+
+
+def test_archive_lists_runs_oldest_first(tmp_path: Path) -> None:
+    archive = ResultsArchive(tmp_path)
+    newer = make_result([1.0], datetime(2026, 1, 2))
+    older = make_result([1.0], datetime(2025, 1, 2))
+    archive.save(newer)
+    archive.save(older)
+    assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]
+    assert archive.latest_per_ammeter() == [newer]
+
+
+def test_runs_in_the_same_second_still_order_by_start_time(tmp_path: Path) -> None:
+    """A concurrent run archives all three ammeters inside one second, so whole-second ids tie."""
+    archive = ResultsArchive(tmp_path)
+    first = make_result([1.0], datetime(2026, 1, 2, 3, 4, 5, 100_000))
+    second = make_result([1.0], datetime(2026, 1, 2, 3, 4, 5, 900_000))
+    archive.save(second)
+    archive.save(first)
+    assert first.created_at != second.created_at  # the tie the whole-second format used to create
+    assert [r.run_id for r in archive.load_all()] == [first.run_id, second.run_id]
+    assert archive.latest_per_ammeter() == [second]
+
+
+def test_archive_sorts_by_time_not_by_string(tmp_path: Path) -> None:
+    archive = ResultsArchive(tmp_path)
+    winter = make_result([1.0], datetime(2026, 3, 27, 2, 30).astimezone(timezone(timedelta(hours=2))))
+    summer = make_result([1.0], datetime(2026, 3, 27, 3, 15).astimezone(timezone(timedelta(hours=3))))
+    archive.save(summer)
+    archive.save(winter)
+    assert [r.run_id for r in archive.load_all()] == [winter.run_id, summer.run_id]
+
+
+def test_corrupt_files_are_reported_and_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    archive = ResultsArchive(tmp_path)
+    good = make_result([1.0])
+    archive.save(good)
+    (tmp_path / "notes.json").write_text('{"not": "a run"}', encoding="utf-8")
+    (tmp_path / "broken.json").write_text("{truncated", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="notes.json is not a valid run file"):
+        archive.load("notes")
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "broken.json" in caplog.text and "notes.json" in caplog.text
+
+
+def test_missing_run_is_reported(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="no run 'nope'"):
+        ResultsArchive(tmp_path).load("nope")
+
+
+def test_empty_archive(tmp_path: Path) -> None:
+    assert ResultsArchive(tmp_path / "missing").load_all() == []
+
+
+def _dying_write(after: BaseException) -> Callable[..., int]:
+    """A Path.write_text that flushes half the data to disk and then dies, as a truncated write does."""
+    original = Path.write_text
+
+    def write_text(self: Path, data: str, encoding: Optional[str] = None, errors: Optional[str] = None) -> int:
+        original(self, data[: len(data) // 2], encoding=encoding, errors=errors)
+        raise after
+
+    return write_text
+
+
+@pytest.mark.parametrize("death", [OSError("disk full"), KeyboardInterrupt()])
+def test_a_write_that_dies_partway_leaves_no_run_file(
+    death: BaseException, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Half a JSON file must never reach <run_id>.json. KeyboardInterrupt covers Ctrl+C during a write,
+    which is why the cleanup catches BaseException rather than Exception."""
+    archive = ResultsArchive(tmp_path)
+    monkeypatch.setattr(Path, "write_text", _dying_write(death))
+    with pytest.raises(type(death)):
+        archive.save(make_result([1.0]))
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_unparseable_timestamp_is_skipped_like_any_other_corruption(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A stamp that survives from_dict but not fromisoformat must not take the whole listing down."""
+    archive = ResultsArchive(tmp_path)
+    good, mangled = make_result([1.0]), make_result([2.0], datetime(2026, 5, 6, 7, 8, 9))
+    archive.save(good)
+    archive.save(mangled)
+    path = archive.path_for(mangled.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "the third of never"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "unsortable created_at" in caplog.text
+
+
+def test_a_naive_stamp_still_orders_against_an_aware_one(tmp_path: Path) -> None:
+    """from_samples takes the caller's datetime, so an archive can hold both kinds; sorting must survive it."""
+    archive = ResultsArchive(tmp_path)
+    naive = make_result([1.0], datetime(2000, 1, 1))
+    aware = make_result([2.0], datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
+    archive.save(naive)
+    archive.save(aware)
+
+    assert [r.run_id for r in archive.load_all()] == [naive.run_id, aware.run_id]
+
+
+def test_a_run_whose_stamp_cannot_be_sorted_is_still_readable_on_its_own(tmp_path: Path) -> None:
+    """Only ordering parses created_at, so reading one run by id must not care that it is unsortable."""
+    archive = ResultsArchive(tmp_path)
+    result = make_result([1.0])
+    archive.save(result)
+    path = archive.path_for(result.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "the third of never"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert archive.load(result.run_id).created_at == "the third of never"
+
+
+def test_the_z_suffix_sorts_even_though_3_9_cannot_parse_it(tmp_path: Path) -> None:
+    """'...05Z' is valid ISO 8601 but not what isoformat writes, so 3.9 rejects it; it must still order."""
+    archive = ResultsArchive(tmp_path)
+    older, newer = make_result([1.0], datetime(2000, 1, 1)), make_result([2.0])
+    archive.save(older)
+    archive.save(newer)
+    path = archive.path_for(newer.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "2026-01-02T03:04:05Z"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]
+
+
+def test_a_created_at_that_is_not_a_string_is_skipped_not_a_crash(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """from_dict copies created_at through unchecked, so the sort key must survive any JSON type."""
+    archive = ResultsArchive(tmp_path)
+    good, broken = make_result([1.0]), make_result([2.0], datetime(2026, 5, 6, 7, 8, 9))
+    archive.save(good)
+    archive.save(broken)
+    path = archive.path_for(broken.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = None
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "unsortable created_at" in caplog.text

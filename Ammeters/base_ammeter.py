@@ -1,6 +1,5 @@
+import os
 import socket
-import time
-import random
 from abc import ABC, abstractmethod
 
 NotImplementedErrorMsg = "Subclasses must implement this property."
@@ -8,14 +7,15 @@ NotImplementedErrorMsg = "Subclasses must implement this property."
 class AmmeterEmulatorBase(ABC):
     def __init__(self, port: int):
         self.port = port
-        random.seed(time.time())  # Seed the random number generator for each instance
 
-    def start_server(self):
+    def start_server(self) -> None:
         """
         Starts the server to listen for client requests.
         The server will run indefinitely, handling one client request at a time.
         """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if os.name == "posix":  # restart while old connections are in TIME_WAIT; unsafe on Windows
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(('localhost', self.port))
             s.listen()
             print(f"{self.__class__.__name__} is running on port {self.port}")
@@ -23,11 +23,14 @@ class AmmeterEmulatorBase(ABC):
                 conn, addr = s.accept()
                 with conn:
                     print(f"Connected by {addr}")
-                    data = conn.recv(1024)
-                    if data == self.get_current_command:
-                        # Call the specific measure_current() method defined in subclasses
-                        current = self.measure_current()
-                        conn.sendall(str(current).encode('utf-8'))
+                    try:
+                        data = conn.recv(1024)
+                        if data == self.get_current_command:
+                            # Call the specific measure_current() method defined in subclasses
+                            current = self.measure_current()
+                            conn.sendall(str(current).encode('utf-8'))
+                    except Exception as exc:  # a vanished client, or a bad reading, must not end the loop
+                        print(f"Dropped connection from {addr}: {exc}")
 
     @property
     @abstractmethod
