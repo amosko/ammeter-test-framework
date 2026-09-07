@@ -89,6 +89,7 @@ class AmmeterTestFramework:
         """Sample the named ammeters over the same window, one worker each. Results follow the order given."""
         if len(names) < 2:
             return [self.run_test(name, label) for name in names]  # run_test does its own pre-check
+        self.sampling_plan()  # an unfittable retry budget must fail before any device is touched
         for name in names:
             self.make_measure(self.config.ammeter(name))()  # unknown or unreachable: fail before the pool
         cancelled = threading.Event()  # per call, so a cancelled run cannot reach into the next one

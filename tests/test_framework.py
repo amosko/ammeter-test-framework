@@ -265,3 +265,18 @@ def test_fault_injector_is_reproducible_with_a_seed() -> None:
     assert True in outcomes(1) and False in outcomes(1)
     with pytest.raises(ValueError):
         FaultInjector(lambda: 1.0, failure_rate=1.5)
+
+
+def test_the_retry_budget_is_rejected_before_the_multi_ammeter_pre_check(config: Config) -> None:
+    """run_selected reads from every device to pre-check it, so the plan has to be resolved ahead of that."""
+    touched: list[str] = []
+
+    class RecordingFramework(AmmeterTestFramework):
+        def make_measure(self, spec: AmmeterSpec) -> Measure:
+            touched.append(spec.name)
+            return lambda: 4.2
+
+    config = dataclasses.replace(config, retry_attempts=4, retry_backoff_s=1.0)
+    with pytest.raises(ConfigError, match="retry budget"):
+        RecordingFramework(config).run_all()
+    assert touched == []

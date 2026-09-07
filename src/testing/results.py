@@ -6,7 +6,7 @@ import os
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -92,6 +92,12 @@ class RunResult:
         )
 
 
+def _created_at(result: RunResult) -> datetime:
+    """Sort key for archived runs; a naive stamp is read as UTC so a mixed archive still orders."""
+    stamp = datetime.fromisoformat(result.created_at)
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
 class ResultsArchive:
     """Stores runs as <directory>/<run_id>.json. Run ids embed the start time, so names sort chronologically."""
 
@@ -119,7 +125,9 @@ class ResultsArchive:
         if not path.is_file():
             raise FileNotFoundError(f"no run '{run_id}' in {self.directory}")
         try:
-            return RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            result = RunResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            _created_at(result)  # an unparseable stamp is corruption too, not a crash at sort time
+            return result
         except (ValueError, KeyError, TypeError, ConfigError) as exc:
             raise ValueError(f"{path} is not a valid run file: {exc}") from None
 
@@ -131,7 +139,7 @@ class ResultsArchive:
                 results.append(self.load(path.stem))
             except ValueError as exc:
                 logger.warning("skipping %s", exc)
-        return sorted(results, key=lambda r: datetime.fromisoformat(r.created_at))
+        return sorted(results, key=_created_at)
 
     def latest_per_ammeter(self) -> list[RunResult]:
         latest = {result.ammeter.name: result for result in self.load_all()}

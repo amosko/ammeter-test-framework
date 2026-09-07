@@ -192,7 +192,14 @@ def _emulators(config: Config, config_path: Path, names: Sequence[str]) -> Itera
         yield
     finally:
         process.terminate()
-        process.wait(timeout=5)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:  # never let cleanup replace the error that got us here
+            process.kill()
+            process.wait()
+        finally:
+            if process.stderr:
+                process.stderr.close()
 
 
 def _wait_for_emulator(process: "subprocess.Popen[str]", spec: AmmeterSpec) -> None:

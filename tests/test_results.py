@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -124,3 +125,32 @@ def test_a_write_that_dies_partway_leaves_no_run_file(
     with pytest.raises(type(death)):
         archive.save(make_result([1.0]))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_an_unparseable_timestamp_is_skipped_like_any_other_corruption(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A stamp that survives from_dict but not fromisoformat must not take the whole listing down."""
+    archive = ResultsArchive(tmp_path)
+    good, mangled = make_result([1.0]), make_result([2.0], datetime(2026, 5, 6, 7, 8, 9))
+    archive.save(good)
+    archive.save(mangled)
+    path = archive.path_for(mangled.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = "the third of never"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "is not a valid run file" in caplog.text
+
+
+def test_a_naive_stamp_still_orders_against_an_aware_one(tmp_path: Path) -> None:
+    """from_samples takes the caller's datetime, so an archive can hold both kinds; sorting must survive it."""
+    archive = ResultsArchive(tmp_path)
+    naive = make_result([1.0], datetime(2000, 1, 1))
+    aware = make_result([2.0], datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
+    archive.save(naive)
+    archive.save(aware)
+
+    assert [r.run_id for r in archive.load_all()] == [naive.run_id, aware.run_id]

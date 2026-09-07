@@ -84,7 +84,7 @@ circutor  20260906_164010_circutor_aa9fba71  0.02907   0.02703     0.01357    46
 entes     20260906_164010_entes_41918e70     76.52     73.06       40.12      52.44  0/50          1.61
 greenlee  20260906_164010_greenlee_d74b38ba  0.4325    0.1066      1.266      292.6  0/50          2.04
 Most consistent (lowest CV): circutor at 46.69%
-Most reliable (fewest failed samples): circutor at 0/50
+Most reliable (lowest failure rate): 3 runs tied at 0% failed
 ```
 
 ## Commands
@@ -217,7 +217,7 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 
 ```sh
 python3 -m pip install -r requirements-dev.txt
-python3 -m pytest            # 157 tests, about 6 seconds; starts emulators on free ports by itself
+python3 -m pytest            # 160 tests, about 6 seconds; starts emulators on free ports by itself
 python3 -m ruff check .
 python3 -m mypy main.py run_tests.py Ammeters src tests examples   # run on 3.9, the version it targets
 ```
