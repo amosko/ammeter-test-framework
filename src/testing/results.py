@@ -97,7 +97,7 @@ def _created_at(result: RunResult) -> datetime:
     try:
         # Python 3.9's fromisoformat reads back only what isoformat writes, and 'Z' is not part of that.
         stamp = datetime.fromisoformat(result.created_at.replace("Z", "+00:00"))
-    except ValueError:
+    except (AttributeError, TypeError, ValueError):  # not a string at all, or not a stamp we can read
         raise ValueError(f"run {result.run_id} has an unsortable created_at {result.created_at!r}") from None
     return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 

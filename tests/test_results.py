@@ -181,3 +181,21 @@ def test_the_z_suffix_sorts_even_though_3_9_cannot_parse_it(tmp_path: Path) -> N
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     assert [r.run_id for r in archive.load_all()] == [older.run_id, newer.run_id]
+
+
+def test_a_created_at_that_is_not_a_string_is_skipped_not_a_crash(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """from_dict copies created_at through unchecked, so the sort key must survive any JSON type."""
+    archive = ResultsArchive(tmp_path)
+    good, broken = make_result([1.0]), make_result([2.0], datetime(2026, 5, 6, 7, 8, 9))
+    archive.save(good)
+    archive.save(broken)
+    path = archive.path_for(broken.run_id)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["created_at"] = None
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        assert archive.load_all() == [good]
+    assert "unsortable created_at" in caplog.text
