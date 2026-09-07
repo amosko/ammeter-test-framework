@@ -1,10 +1,14 @@
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from src.testing.reporting import format_comparison, format_listing, format_run
+import pytest
+
+from src.testing.reporting import _table, format_comparison, format_listing, format_run
 from src.testing.results import RunResult
 from src.testing.sampling import Sample, SamplingPlan
-from src.testing.visualization import cv_bars
+from src.testing.visualization import cv_bars, plot_comparison, plot_run
 from src.utils.config import AmmeterSpec
 from src.utils.text import plural
 
@@ -94,3 +98,33 @@ def test_a_single_sample_report_omits_the_empty_scheduled_span() -> None:
     """One paced sample is scheduled at zero, so "(scheduled 0 s)" is a number rather than information."""
     result = make_result("greenlee", [1.0])
     assert "(scheduled" not in format_run(result)
+
+
+def test_plots_are_skipped_when_matplotlib_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The README calls matplotlib optional, so its absence must be a skipped plot, not a crash."""
+    monkeypatch.setitem(sys.modules, "matplotlib", None)  # makes `import matplotlib` raise ImportError
+    result = make_result("greenlee", [1.0, 3.0])
+    assert plot_run(result, tmp_path / "x.png") is None
+    assert plot_comparison([result], tmp_path / "y.png") is None
+
+
+def test_accuracy_columns_need_every_run_to_have_a_reference() -> None:
+    """Only some runs having a reference must drop the columns for everyone, not build a ragged table:
+    the widths come from zip(), which would otherwise truncate every line to the shortest row."""
+    with_ref = make_result("greenlee", [1.0, 3.0], reference_a=2.0)
+    without = make_result("entes", [1.0, 3.0])
+    assert "bias [A]" not in format_comparison([with_ref, without])
+    assert "bias [A]" in format_comparison([with_ref])
+
+
+def test_a_ragged_table_is_an_error_rather_than_silent_truncation() -> None:
+    with pytest.raises(ValueError, match="2 cells for 3 columns"):
+        _table(["a", "b", "c"], [["1", "2", "3"], ["4", "5"]])
+
+
+def test_comparison_names_the_most_reliable_ammeter() -> None:
+    """The specification asks to identify the most reliable method; CV and accuracy do not measure that."""
+    flaky = make_result("greenlee", [1.0, None, None])
+    solid = make_result("entes", [5.0, None, 7.0])
+    report = format_comparison([flaky, solid])
+    assert "Most reliable (fewest failed samples): entes at 1/3" in report

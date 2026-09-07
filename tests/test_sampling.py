@@ -52,6 +52,14 @@ def test_invalid_plans_are_rejected(kwargs: dict[str, Any]) -> None:
         SamplingPlan.resolve(**kwargs)
 
 
+def test_a_zero_value_is_rejected_rather_than_silently_clamped() -> None:
+    """Without the positivity guard, duration 0 resolves to a one-sample run instead of an error."""
+    with pytest.raises(ValueError, match="duration must be positive"):
+        SamplingPlan.resolve(duration_s=0.0, frequency_hz=20)
+    with pytest.raises(ValueError, match="count must be positive"):
+        SamplingPlan.resolve(count=0, frequency_hz=20)
+
+
 def test_samples_follow_the_schedule() -> None:
     plan = SamplingPlan(count=20, interval_s=0.01)
     samples = collect_samples(lambda: 1.0, plan, "greenlee")
@@ -64,13 +72,17 @@ def test_samples_follow_the_schedule() -> None:
     # stalling runner shifts every sample alike and passes; cumulative sleeping makes each sample later
     # than the last, so the tail falls a whole interval or more behind the head.
     deviations = [s.measured_at_s - s.scheduled_s for s in samples]
-    head, tail = statistics.median(deviations[:10]), statistics.median(deviations[10:])
+
+    # Minimum, not median: one stalled sample raises only the samples after it, so the tail minimum stays
+    # put, while cumulative drift raises every sample in the tail. A median tail fails on a single 120 ms
+    # stall, which a shared runner produces -- DESIGN.md records 51 ms on one.
+    head, tail = min(deviations[:10]), min(deviations[10:])
     assert tail < head + plan.interval_s
 
-    # The head/tail check above is invariant to a uniform shift by construction, which is what makes it
+    # The check above is invariant to a uniform shift by construction, which is what makes it
     # host-independent and also what makes it blind: without this, a sampler late on every sample passes.
-    # 20 intervals is far above the 11.9 ms a macOS runner produced and far below any real lateness.
-    assert statistics.median(deviations) < 20 * plan.interval_s
+    # Five intervals is 4x the worst a macOS runner has produced here and well under any real lateness.
+    assert statistics.median(deviations) < 5 * plan.interval_s
 
 
 def test_unpaced_sampling_does_not_wait(monkeypatch: pytest.MonkeyPatch) -> None:

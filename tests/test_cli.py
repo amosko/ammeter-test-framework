@@ -146,6 +146,7 @@ def test_start_emulators_reports_why_main_py_died(tmp_path: Path, capsys: pytest
     assert main(["--config", str(config), "--results-dir", str(tmp_path), "run", "--start-emulators"]) == 1
     err = capsys.readouterr().err
     assert "main.py exited with code 1" in err and "none of the configured ammeters has an emulator" in err
+    assert "pass --start-emulators" not in err  # already passed; suggesting it again would be noise
 
 
 def test_start_emulators_runs_main_py(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -191,3 +192,23 @@ def test_no_plot_suppresses_the_png(cli: Callable[..., int], tmp_path: Path) -> 
     pytest.importorskip("matplotlib")
     assert cli("run", "greenlee", "--count", "2", "--no-plot") == 0
     assert list((tmp_path / "results").glob("*.png")) == []
+
+
+def test_compare_no_plot_suppresses_the_png(cli: Callable[..., int], tmp_path: Path) -> None:
+    """The other --no-plot: `run` and `compare` each have one, and only `run`'s was pinned."""
+    pytest.importorskip("matplotlib")
+    assert cli("run", "greenlee", "--count", "2", "--no-plot") == 0
+    (result,) = ResultsArchive(tmp_path / "results").load_all()
+
+    assert cli("compare", result.run_id, "--no-plot") == 0
+    assert list((tmp_path / "results").glob("*comparison*.png")) == []
+
+
+def test_an_interrupt_exits_130(cli: Callable[..., int], monkeypatch: pytest.MonkeyPatch) -> None:
+    """README documents 130 in its exit-code list."""
+
+    def interrupted(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("src.testing.cli.AmmeterTestFramework.run_selected", interrupted)
+    assert cli("run", "greenlee", "--no-plot") == 130

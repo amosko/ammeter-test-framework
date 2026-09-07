@@ -11,7 +11,7 @@ def format_run(result: RunResult) -> str:
     pace = f"{plan.frequency_hz:g} Hz" if plan.frequency_hz else "unpaced"
     label = f"  label: {result.metadata['label']}" if result.metadata.get("label") else ""
     # An unpaced run schedules every sample at zero, so both scheduled figures would only be numbers.
-    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if plan.is_paced else ""
+    schedule_error = f"max schedule error {timing.max_schedule_error_ms:.2f} ms, " if timing.planned_span_s else ""
     scheduled = f" (scheduled {timing.planned_span_s:.3g} s)" if timing.planned_span_s else ""
     lines = [
         f"Run {result.run_id}  [{_verdict(result)}]",
@@ -90,6 +90,11 @@ def format_comparison(results: Sequence[RunResult]) -> str:
     best = ranked[0]
     if best.statistics is not None and best.statistics.cv_percent is not None:
         lines.append(f"Most consistent (lowest CV): {best.ammeter.name} at {_num(best.statistics.cv_percent)}%")
+    reliable = min(ranked, key=lambda r: (r.failure_rate, _cv_key(r)))
+    lines.append(
+        f"Most reliable (fewest failed samples): {reliable.ammeter.name} "
+        f"at {reliable.failed_count}/{len(reliable.samples)}"
+    )
     if with_accuracy:
         accurate = min(results, key=lambda r: r.accuracy.mean_abs_error_percent if r.accuracy else float("inf"))
         if accurate.accuracy is not None:
@@ -114,6 +119,10 @@ def _num(value: Optional[float]) -> str:
 
 
 def _table(header: list[str], rows: list[list[str]]) -> str:
+    # zip() would otherwise truncate every line to the shortest row, dropping real columns silently.
+    ragged = [row for row in rows if len(row) != len(header)]
+    if ragged:
+        raise ValueError(f"row has {len(ragged[0])} cells for {len(header)} columns: {ragged[0]}")
     widths = [max(len(str(cell)) for cell in column) for column in zip(header, *rows)]
     lines = [header] + [["-" * w for w in widths]] + rows
     return "\n".join("  ".join(cell.ljust(width) for cell, width in zip(line, widths)).rstrip() for line in lines)

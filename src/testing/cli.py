@@ -156,7 +156,9 @@ def _sampling_overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 def _sampling_hint(args: argparse.Namespace) -> str:
     flags = [
-        f"--{n}" for n, v in (("count", args.count), ("duration", args.duration), ("frequency", args.frequency)) if v
+        f"--{n}"
+        for n, v in (("count", args.count), ("duration", args.duration), ("frequency", args.frequency))
+        if v is not None  # not truthiness: --duration 0 is a flag the user passed, and an error
     ]
     if len(flags) == 1:
         return f" ({flags[0]} was combined with the config's other sampling values; pass a second flag to replace one)"

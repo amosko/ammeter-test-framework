@@ -98,3 +98,9 @@ def test_verdict_fails_late_samples() -> None:
 def test_verdict_when_every_sample_failed() -> None:
     verdict = verdict_for([sample(0, None, "x")], max_failure_rate=0.05)
     assert not verdict.passed
+
+
+def test_a_failure_rate_exactly_at_the_limit_passes() -> None:
+    """The limit is inclusive: 1 of 20 is exactly the shipped 5%, so it must not fail the run."""
+    samples = [sample(i) for i in range(19)] + [sample(19, value=None, error="x")]
+    assert verdict_for(samples, max_failure_rate=0.05).passed

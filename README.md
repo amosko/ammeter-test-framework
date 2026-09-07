@@ -84,6 +84,7 @@ circutor  20260906_164010_circutor_aa9fba71  0.02907   0.02703     0.01357    46
 entes     20260906_164010_entes_41918e70     76.52     73.06       40.12      52.44  0/50          1.61
 greenlee  20260906_164010_greenlee_d74b38ba  0.4325    0.1066      1.266      292.6  0/50          2.04
 Most consistent (lowest CV): circutor at 46.69%
+Most reliable (fewest failed samples): circutor at 0/50
 ```
 
 ## Commands
@@ -167,9 +168,9 @@ criteria, the retry settings and the simulated failure rate), every sample (sche
 latency, value or error), the statistics (mean, median, sample standard deviation, min, max,
 coefficient of variation), timing metrics, optional accuracy metrics and the verdict with its reasons.
 
-`compare` ranks runs by coefficient of variation (standard deviation divided by mean), the unit-free
-precision measure that can be compared across ammeters with very different current ranges. With a
-reference current it also ranks by mean absolute error.
+`compare` ranks runs three ways: by coefficient of variation (standard deviation divided by mean), the
+unit-free precision measure comparable across ammeters with very different current ranges; by failed
+samples, which is reliability; and, when every run has a reference current, by mean absolute error.
 
 The `results/` directory in this repository contains five sample runs (baseline for all three ammeters,
 an error-simulation run and a reference-current run). `results/logs/` holds the log files of `run`
@@ -216,7 +217,7 @@ docs/DESIGN.md            design decisions and the fixes made to the original co
 
 ```sh
 python3 -m pip install -r requirements-dev.txt
-python3 -m pytest            # 142 tests, about 6 seconds; starts emulators on free ports by itself
+python3 -m pytest            # 150 tests, about 6 seconds; starts emulators on free ports by itself
 python3 -m ruff check .
 python3 -m mypy main.py run_tests.py Ammeters src tests examples   # run on 3.9, the version it targets
 ```
