@@ -7,7 +7,7 @@ import pytest
 
 from Ammeters.client import AmmeterError
 from src.testing.analysis import TimingStats, evaluate
-from src.testing.sampling import SamplingPlan, collect_samples
+from src.testing.sampling import SPIN_WINDOW_S, SamplingPlan, collect_samples
 from src.utils.config import AmmeterSpec
 
 SPEC = AmmeterSpec("greenlee", "127.0.0.1", 5000, "CMD")
@@ -148,9 +148,14 @@ def test_the_sampler_sleeps_toward_the_deadline_rather_than_once(monkeypatch: py
 
     monkeypatch.setattr("src.testing.sampling.time.sleep", recording_sleep)
 
-    collect_samples(lambda: 1.0, SamplingPlan(count=3, interval_s=0.05), "greenlee")
-    assert len(requested) > 3  # several converging sleeps per sample, not one per deadline
-    assert max(requested) < 0.05  # and none of them the whole remaining interval
+    plan = SamplingPlan(count=3, interval_s=0.05)
+    collect_samples(lambda: 1.0, plan, "greenlee")
+
+    # Assert the size of what it asks for, not how many times: on a host that oversleeps, one overshoot
+    # ends the loop and the count collapses. Halving can never ask for more than half the remainder,
+    # while sleeping straight to the spin window asks for nearly the whole interval.
+    assert requested, "the paced wait must sleep rather than spin the whole interval"
+    assert max(requested) <= (plan.interval_s - SPIN_WINDOW_S) / 2 + 1e-9
 
 
 def test_a_late_sample_fails_the_shipped_criterion(monkeypatch: pytest.MonkeyPatch) -> None:
